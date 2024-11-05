@@ -1,0 +1,25 @@
+# Take note, this is for running step 9. Other parts of the project may require different installations.
+
+# Core data processing and scientific computing
+pandas>=1.5.0
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Machine Learning
+scikit-learn>=1.0.0
+torch>=2.0.0
+transformers>=4.30.0
+faiss-gpu  # Use faiss-gpu if you have CUDA support
+annoy>=1.17.0
+
+# Graph processing
+networkx>=2.8.0
+
+# Geolocation
+geopy>=2.3.0
+
+# File handling and paths
+pathlib>=1.0.1
+
+# Type hints
+typing>=3.7.4.3
