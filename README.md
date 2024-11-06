@@ -35,6 +35,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+```bash
+conda install -c conda-forge faiss-gpu
+```
+
 ## System-Specific Setup
 
 ### Windows
@@ -61,8 +65,7 @@ sudo apt-get install python3-dev build-essential
 
 If you have a CUDA-capable GPU:
 
-1. Replace `faiss-cpu` with `faiss-gpu` in requirements.txt
-2. Install the CUDA version of PyTorch:
+1. Install the CUDA version of PyTorch:
    - Visit [PyTorch's website](https://pytorch.org/get-started/locally/)
    - Select your specific configuration
    - Use the provided installation command
@@ -84,6 +87,33 @@ pip uninstall -r requirements.txt -y
 2. Reinstall requirements:
 ```bash
 pip install -r requirements.txt
+```
+
+## Build Modelfile for Ollama
+
+1. create a Modelfile and put in these details   
+```bash
+from path\to\your\model\capybarahermes-2.5-mistral-7b.Q5_K_M.gguf
+
+# Basic parameters for chat completion
+PARAMETER temperature 0.7
+PARAMETER stop "User:"
+PARAMETER stop "Assistant:"
+PARAMETER num_ctx 32768
+PARAMETER num_gpu 35
+PARAMETER num_thread 8
+
+# Chat template for Mistral-style interactions
+TEMPLATE """{{- if .System }}{{.System}}{{ end }}
+
+{{- if .Prompt }}
+User: {{.Prompt}}
+Assistant: {{end}}"""
+```
+   
+2. Run the the following command in CLI:
+```bash
+ollama create capybarahermes-2.5-mistral-7b.Q5_K_M.gguf:latest -f Modelfile
 ```
 
 ## Usage
