@@ -44,6 +44,7 @@ https://zbib.org/fe7294b1ef2a4e3d8106189920779e8e
     - [4) Sensitivity and Ablation Studies](#4-sensitivity-and-ablation-studies)
 - [VII. HUMAN-COMPUTER INTERACTION AND INTERFACE DESIGN](#vii-human-computer-interaction-and-interface-design)
 - [VIII. CONCLUSION](#viii-conclusion)
+- [IX. ACKNOWLEDGEMENTS](#ix-acknowledgements)
 
 
 # Graph-Based Job Recommendation System
@@ -355,3 +356,9 @@ The system's architecture demonstrates several key innovations. The hybrid scori
 While the system shows strong performance in both structural and semantic dimensions, there are opportunities for future research. The handling of spatial distribution patterns could be refined to better reflect Singapore's unique urban geography. Additionally, as the job market continues to evolve, particularly with the rise of remote work options, future iterations could explore dynamic graph updating mechanisms to better capture emerging employment patterns.
 
 The successful implementation of this system demonstrates the potential of graph-based approaches in addressing complex job matching challenges. By combining advanced machine learning techniques with practical considerations specific to Singapore's context, this work contributes to the ongoing development of more effective employment matching solutions.
+
+# IX. ACKNOWLEDGEMENTS
+
+We would like to express our sincere gratitude to Dr. Victor Shanshan Feng for his invaluable guidance, expertise, and unwavering support throughout this research project. His deep knowledge of Graph Neural Networks and recommendation systems has been instrumental in shaping this study's direction and methodology.
+
+Finally, we would like to thank our peers and colleagues who participated in numerous discussions and provided valuable suggestions that helped refine the algorithm's approach to job recommendations in the Singapore context.
