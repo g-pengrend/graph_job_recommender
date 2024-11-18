@@ -6,3 +6,8 @@
 graph.zip
 jobs.csvZone.Identifier
 group_project_graph_demo/demo/models/capybarahermes-2.5-mistral-7b.Q5_K_M.gguf
+*.Identifier
+*.DS_Store
+*.pdf
+11.group_project_graph_demo/demo/models/capybarahermes-2.5-mistral-7b.Q5_K_M.gguf
+*.DS_Store
