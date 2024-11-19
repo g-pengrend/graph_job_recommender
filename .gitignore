@@ -12,3 +12,4 @@ group_project_graph_demo/demo/models/capybarahermes-2.5-mistral-7b.Q5_K_M.gguf
 11.group_project_graph_demo/demo/models/capybarahermes-2.5-mistral-7b.Q5_K_M.gguf
 *.DS_Store
 *.env
+*.pyc
