@@ -300,6 +300,8 @@ def get_graph_based_recommendations(
                         'is_remote': job_data['is_remote'],
                         'job_url': job_data['job_url'],
                         'job_url_direct': job_data['job_url_direct'],
+                        'similarity_score': float(similarity_score),
+                        'graph_score': float(graph_score),
                         'final_score': float(final_score),
                         'graph_metrics': {
                             'pagerank': graph_metrics['pagerank'][f"job_{idx}"],
@@ -769,6 +771,9 @@ def display_streamlit_recommendation_group(recommendations: List[dict], preferen
     # Display statistics for this group
     st.metric("Results Found", len(recommendations))
     
+    # Get blend weights for this group
+    blend_weights = calculate_blend_weights(len(recommendations))
+    
     for i, rec in enumerate(recommendations, 1):
         with st.expander(f"{i}. {rec['company']} - {rec['title']}"):
             col1, col2 = st.columns([2, 1])
@@ -790,15 +795,27 @@ def display_streamlit_recommendation_group(recommendations: List[dict], preferen
                     st.write("Location: Information unavailable")
             
             with col2:
-                st.write("**Similarity Score**")
-                st.metric("Score", f"{rec['final_score']:.3f}")
+                st.write("**Score Breakdown**")
+                # Calculate the similarity and graph components
+                similarity_weight = blend_weights[i-1]
+                graph_weight = 1 - similarity_weight
+                
+                similarity_score = rec['similarity_score'] if 'similarity_score' in rec else rec['final_score']
+                graph_score = rec['graph_score'] if 'graph_score' in rec else 0.0
+                
+                weighted_similarity = similarity_score * similarity_weight
+                weighted_graph = graph_score * graph_weight
+                
+                # Display the scores with weights
+                st.metric("Final Score", f"{rec['final_score']:.3f}")
+                st.write(f"Similarity ({similarity_weight*100:.0f}%): {weighted_similarity:.3f}")
+                st.write(f"Graph ({graph_weight*100:.0f}%): {weighted_graph:.3f}")
             
             st.write("**Links**")
             if rec.get('job_url_direct'):
                 st.write(f"[Direct Link]({rec['job_url_direct']})")
             if rec.get('job_url'):
                 st.write(f"[Platform Link]({rec['job_url']})")
-
 def main():
     st.title("Job Recommendation System")
     
