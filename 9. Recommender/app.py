@@ -17,7 +17,7 @@ import ast
 import time
 
 # Import your existing modules
-from weight_calculator import calculate_weights
+# from weight_calculator import calculate_weights
 from resource_loader import load_global_resources
 from preloaded_preferences import get_preloaded_preferences, JOB_PREFERENCES, LOCATIONS, IMPORTANCE_LEVELS
 from user_preference import UserPreferences
@@ -154,126 +154,120 @@ def calculate_score_components(
     # Add graph metrics
     score_components['degree'] = graph_metrics['degree'][node]
     score_components['pagerank'] = graph_metrics['pagerank'][node]
-    score_components['core_number'] = graph_metrics['core_numbers'][node]
+    score_components['core_numbers'] = graph_metrics['core_numbers'][node]
     
     return {k: max(0, min(1, v)) for k, v in score_components.items()}
 
 def get_graph_based_recommendations(
-    preferences: UserPreferences,
-    n_hops: int = 2,
-    top_k: int = 5,
-    n_candidates: int = 1000
+    preferences: UserPreferences
 ) -> Dict[str, List[dict]]:
-    """Generate recommendations using both FAISS and Annoy for hybrid search"""
+    """Get recommendations based on direct cosine similarity"""
     with st.spinner("Starting recommendation generation..."):
-        start_time = time.time()
-        
-        # Unpack resources
-        graph = GLOBAL_RESOURCES['graph']
-        node_embeddings = GLOBAL_RESOURCES['node_embeddings']
+        # Unpack only needed resources
+        df = GLOBAL_RESOURCES['df']
         tokenizer = GLOBAL_RESOURCES['tokenizer']
         model = GLOBAL_RESOURCES['model']
         device = GLOBAL_RESOURCES['device']
-        faiss_index = GLOBAL_RESOURCES['faiss_index']
-        annoy_index = GLOBAL_RESOURCES['annoy_index']
-        normalized_embeddings = GLOBAL_RESOURCES['normalized_embeddings']
+        graph = GLOBAL_RESOURCES['graph']
         graph_metrics = GLOBAL_RESOURCES['graph_metrics']
-        mlb = GLOBAL_RESOURCES['mlb']
-        df = GLOBAL_RESOURCES['df']
         
-        embeddings_np = node_embeddings.numpy()
-        
-        # Create mapping from string ID to graph node name
-        id_to_node = {row['id']: f"job_{idx}" for idx, row in df.iterrows()}
-        node_to_id = {f"job_{idx}": row['id'] for idx, row in df.iterrows()}
-        
-        # Generate candidate nodes
-        with st.spinner("Generating candidate nodes..."):
-            candidate_indices = set()
-            
-            if preferences.job_title:
-                title_embedding = get_job_title_embedding(preferences.job_title, tokenizer, model, device)
-                title_embedding = title_embedding / np.linalg.norm(title_embedding)
-                
-                # Search with FAISS
-                D_faiss, I_faiss = faiss_index.search(title_embedding.astype('float32').reshape(1,-1), top_k)
-                faiss_candidates = set(I_faiss[0])
-                
-                # Search with Annoy
-                annoy_candidates = set(annoy_index.get_nns_by_vector(title_embedding, top_k, search_k=-1))
-                candidate_indices = faiss_candidates.union(annoy_candidates)
-            else:
-                weights = np.array([graph_metrics['pagerank'][f"job_{i}"] for i in range(len(df))])
-                weights = weights / weights.sum()
-                candidate_indices = set(np.random.choice(
-                    len(df),
-                    size=min(n_candidates, len(df)),
-                    p=weights,
-                    replace=False
-                ))
-
-        # Process candidates in batches
-        batch_size = 100
-        job_scores = []
-        total_batches = len(candidate_indices) // batch_size + (1 if len(candidate_indices) % batch_size else 0)
-        
-        progress_bar = st.progress(0)
-        for batch_start in range(0, len(candidate_indices), batch_size):
-            batch_indices = list(candidate_indices)[batch_start:batch_start + batch_size]
-            current_batch = batch_start // batch_size + 1
-            progress_bar.progress(current_batch / total_batches)
-            
-            batch_scores = process_candidate_batch(
-                batch_indices, 
-                graph, 
-                preferences, 
-                normalized_embeddings,
-                graph_metrics,
-                tokenizer,
-                model,
-                device,
-                node_to_id,
-                mlb,
-                df
-            )
-            job_scores.extend(batch_scores)
-
-        # Separate recommendations by distance
+        # Initialize results containers
         within_range = []
         outside_range = []
         
-        for score in job_scores:
-            try:
-                if preferences.location:
-                    job_loc = (
-                        ast.literal_eval(score['location'])
-                        if isinstance(score['location'], str)
-                        else score['location']
-                    )
-                    distance = geodesic(preferences.location, job_loc).kilometers
-                    score['distance'] = distance
+        # Calculate similarities based on priority or fall back to graph metrics
+        with st.spinner("Calculating similarities..."):
+            if preferences.priority == "Job Title" and preferences.job_title:
+                title_embedding = get_job_title_embedding(preferences.job_title, tokenizer, model, device)
+                similarities = np.dot(np.array(df['job_title_embedding'].tolist()), title_embedding)
+                
+            elif preferences.priority == "Job Description" and preferences.job_description:
+                desc_embedding = get_job_description_embedding(
+                    preferences.job_description,
+                    tokenizer,
+                    model,
+                    device=device
+                )
+                similarities = np.dot(np.array(df['job_description_embedding'].tolist()), desc_embedding)
+            
+            else:
+                # Fallback to graph metrics if no title or description provided
+                st.info("No title or description provided. Using graph metrics for recommendations.")
+                similarities = np.array([
+                    graph_metrics['pagerank'][f"job_{i}"] * 0.4 +
+                    graph_metrics['degree'][f"job_{i}"] * 0.4 +
+                    graph_metrics['core_numbers'][f"job_{i}"] * 0.2
+                    for i in range(len(df))
+                ])
+            
+            # Get indices sorted by similarity
+            sorted_indices = np.argsort(similarities)[::-1]
+            
+            # Process results
+            for idx in sorted_indices:
+                if (len(within_range) >= preferences.within_range_count and 
+                    len(outside_range) >= preferences.outside_range_count):
+                    break
                     
-                    if distance <= preferences.max_distance_km:
-                        within_range.append(score)
+                try:
+                    job_data = df.iloc[idx]
+                    similarity_score = similarities[idx]
+                    
+                    # Process job type
+                    job_type = job_data['job_type']
+                    if isinstance(job_type, str):
+                        try:
+                            job_type = ast.literal_eval(job_type)
+                        except:
+                            job_type = [job_type]
+                    elif not isinstance(job_type, (list, tuple)):
+                        job_type = [str(job_type)]
+                    
+                    job_entry = {
+                        'index': job_data['id'],
+                        'company': job_data['company'],
+                        'title': job_data['title'],
+                        'job_type': job_type,
+                        'location': job_data['lat_long'],
+                        'address': job_data['address'],
+                        'is_remote': job_data['is_remote'],
+                        'job_url': job_data['job_url'],
+                        'job_url_direct': job_data['job_url_direct'],
+                        'final_score': float(similarity_score)
+                    }
+                    
+                    # Check distance if location preference exists
+                    if preferences.location and job_data['lat_long']:
+                        try:
+                            job_loc = (
+                                ast.literal_eval(job_data['lat_long'])
+                                if isinstance(job_data['lat_long'], str)
+                                else job_data['lat_long']
+                            )
+                            distance = geodesic(preferences.location, job_loc).kilometers
+                            job_entry['distance'] = distance
+                            
+                            if distance <= preferences.max_distance_km:
+                                if len(within_range) < preferences.within_range_count:
+                                    within_range.append(job_entry)
+                            else:
+                                if len(outside_range) < preferences.outside_range_count:
+                                    outside_range.append(job_entry)
+                        except:
+                            if len(outside_range) < preferences.outside_range_count:
+                                outside_range.append(job_entry)
                     else:
-                        outside_range.append(score)
-                else:
-                    within_range.append(score)
-                    
-            except Exception as e:
-                st.error(f"Error processing location for job {score['index']}: {e}")
-                outside_range.append(score)
-
-        # Sort both lists by final_score
-        within_range.sort(key=lambda x: x['final_score'], reverse=True)
-        outside_range.sort(key=lambda x: x['final_score'], reverse=True)
-
-        recommendations = {
-            'within_range': within_range[:top_k],
-            'outside_range': outside_range[:top_k]
-        }
-
-        return recommendations
+                        if len(within_range) < preferences.within_range_count:
+                            within_range.append(job_entry)
+                
+                except Exception as e:
+                    st.error(f"Error processing index {idx}: {str(e)}")
+                    continue
+            
+            return {
+                'within_range': within_range[:preferences.within_range_count],
+                'outside_range': outside_range[:preferences.outside_range_count]
+            }
 
 def process_candidate_batch(
     batch_indices: List[int],
@@ -296,23 +290,29 @@ def process_candidate_batch(
             node = f"job_{idx}"
             attrs = graph.nodes[node]
             
-            score_components = calculate_score_components(
-                idx,
-                node,
-                attrs,
-                preferences,
-                normalized_embeddings,
-                graph_metrics,
-                tokenizer,
-                model,
-                device
-            )
-            
-            # Calculate final score
-            final_score = sum(
-                score * preferences.weights.get(component, 0)
-                for component, score in score_components.items()
-            )
+            # Get similarity score based on priority
+            if preferences.priority == "Job Title" and preferences.job_title:
+                title_embedding = get_job_title_embedding(preferences.job_title, tokenizer, model, device)
+                final_score = np.dot(title_embedding, normalized_embeddings[idx])
+                # Convert from [-1,1] to [0,1] range
+                final_score = (final_score + 1) / 2
+            elif preferences.priority == "Job Description" and preferences.job_description:
+                desc_embedding = get_job_description_embedding(
+                    preferences.job_description,
+                    tokenizer,
+                    model,
+                    device=device
+                )
+                final_score = np.dot(desc_embedding, normalized_embeddings[idx])
+                # Convert from [-1,1] to [0,1] range
+                final_score = (final_score + 1) / 2
+            else:
+                # Fallback to graph metrics if no priority
+                final_score = (
+                    graph_metrics['pagerank'][node] * 0.4 +
+                    graph_metrics['degree'][node] * 0.4 +
+                    graph_metrics['core_numbers'][node] * 0.2
+                )
             
             # Decode job type
             job_type_encoded = attrs['job_type_encoding']
@@ -335,7 +335,6 @@ def process_candidate_batch(
                 'is_remote': attrs['is_remote'],
                 'job_url': job_data['job_url'],
                 'job_url_direct': job_data['job_url_direct'],
-                'score_components': score_components,
                 'final_score': final_score
             })
             
@@ -347,6 +346,30 @@ def process_candidate_batch(
 
 def streamlit_get_preferences() -> UserPreferences:
     """Get user preferences through Streamlit UI"""
+    # Initialize all session state variables if not exists
+    if 'processed_pdf_text' not in st.session_state:
+        st.session_state.processed_pdf_text = None
+    if 'raw_pdf_text' not in st.session_state:
+        st.session_state.raw_pdf_text = None
+    if 'current_pdf_name' not in st.session_state:
+        st.session_state.current_pdf_name = None
+    if 'processed_text_input' not in st.session_state:
+        st.session_state.processed_text_input = None
+    if 'current_text_input' not in st.session_state:
+        st.session_state.current_text_input = None
+    if 'location_cache' not in st.session_state:
+        st.session_state.location_cache = {}
+    if 'current_job_title' not in st.session_state:
+        st.session_state.current_job_title = None
+    if 'processed_job_title' not in st.session_state:
+        st.session_state.processed_job_title = None
+    if 'active_document' not in st.session_state:
+        st.session_state.active_document = None  # Can be 'text' or 'pdf'
+    if 'active_version' not in st.session_state:
+        st.session_state.active_version = None  # Can be 'raw' or 'ai'
+    if 'final_description' not in st.session_state:
+        st.session_state.final_description = None
+
     st.subheader("Job Preferences")
     
     # Mode selection
@@ -372,19 +395,13 @@ def streamlit_get_preferences() -> UserPreferences:
             st.markdown("**Job Description:**")
             st.text(job_pref["description"])
         
-        # Importance Levels
-        col1, col2 = st.columns(2)
-        with col1:
-            title_importance = st.select_slider(
-                "Title importance",
-                options=IMPORTANCE_LEVELS,
-                value=job_pref["title_importance"]
-            )
-        with col2:
-            description_importance = st.select_slider(
-                "Description importance",
-                options=IMPORTANCE_LEVELS,
-                value=job_pref["description_importance"]
+        # Priority selection if both title and description are available
+        priority = None
+        if job_pref["title"] and job_pref["description"]:
+            priority = st.radio(
+                "Which should be prioritized for matching?",
+                ["Job Title", "Job Description"],
+                help="Select which criteria should be used for finding similar jobs"
             )
         
         # Location Selection
@@ -438,102 +455,197 @@ def streamlit_get_preferences() -> UserPreferences:
             job_title=job_pref["title"],
             job_description=job_pref["description"],
             max_distance_km=max_distance_km,
-            title_importance=title_importance,
-            description_importance=description_importance
+            priority=priority,
+            within_range_count=5,  # Default value
+            outside_range_count=5  # Default value
         )
     
-    else:
-        # Manual preference entry (existing code)
+    else:  # Manual preference entry
+        # Job Title processing with caching
         job_title = st.text_input("Job Title (optional)", "")
-        if job_title:
-            title_importance = st.select_slider(
-                "How important is the job title match?",
-                options=IMPORTANCE_LEVELS,
-                value="Important"
-            )
-        else:
-            title_importance = "Important"
+        if job_title and job_title != st.session_state.current_job_title:
+            st.session_state.current_job_title = job_title
+            with st.spinner("Processing job title..."):
+                processed_title = process_job_description_with_LLM(job_title)
+                st.session_state.processed_job_title = processed_title
+                if processed_title:
+                    with st.expander("View processed job title"):
+                        st.text(processed_title)
         
         # Job Description
         st.write("Job Description (optional)")
         desc_tab1, desc_tab2 = st.tabs(["📝 Text Input", "📄 Upload PDF"])
         
         with desc_tab1:
-            job_description = st.text_area("Enter job description", "", height=200)
+            text_input = st.text_area("Enter job description", "", height=200)
+            
+            if text_input:
+                # Submit button for text input
+                if st.button("Submit Text"):
+                    st.session_state.current_text_input = text_input
+                    with st.spinner("Processing text with AI..."):
+                        processed_text = process_job_description_with_LLM(text_input)
+                        if processed_text:
+                            st.session_state.processed_text_input = processed_text
+                            st.success("Text processed successfully!")
+                
+                # Show both versions in expandable sections if text is submitted
+                if st.session_state.current_text_input:
+                    st.write("Available Versions:")
+                    with st.expander("View Raw Text"):
+                        st.text(text_input)
+                    
+                    if st.session_state.processed_text_input:
+                        with st.expander("View AI Processed Text"):
+                            st.text(st.session_state.processed_text_input)
+                    
+                    # Selection buttons below the expandable sections
+                    st.write("---")  # Add a separator
+                    st.write("Select version to use:")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Use Raw Text"):
+                            st.session_state.active_document = 'text'
+                            st.session_state.active_version = 'raw'
+                            st.session_state.final_description = text_input
+                            st.success("Raw text selected for recommendations!")
+                    
+                    with col2:
+                        if st.session_state.processed_text_input and st.button("Use AI Processed Text"):
+                            st.session_state.active_document = 'text'
+                            st.session_state.active_version = 'ai'
+                            st.session_state.final_description = st.session_state.processed_text_input
+                            st.success("AI processed text selected for recommendations!")
         
         with desc_tab2:
             uploaded_file = st.file_uploader("Upload Resume/CV (PDF)", type=['pdf'])
+            
             if uploaded_file:
-                # Extract text from PDF
-                raw_text = extract_text_from_pdf(uploaded_file)
-                if raw_text:
-                    st.success("PDF processed successfully!")
-                    
-                    use_ai = st.checkbox("Process with AI (recommended)", value=True)
-                    
-                    if use_ai:
-                        # Process through LLM
-                        with st.spinner("Processing document through AI..."):
+                # Process PDF button
+                if st.button("Upload PDF to system"):
+                    with st.spinner("Processing PDF..."):
+                        raw_text = extract_text_from_pdf(uploaded_file)
+                        if raw_text:
+                            st.session_state.raw_pdf_text = raw_text
+                            st.session_state.current_pdf_name = uploaded_file.name
                             processed_text = process_job_description_with_LLM(raw_text)
-                        
-                        if processed_text:
-                            st.success("AI processing completed!")
-                            job_description = processed_text
-                            with st.expander("View processed text"):
-                                st.text(job_description)
-                        else:
-                            st.error("Error processing document through AI")
-                            job_description = raw_text
-                            with st.expander("View raw text"):
-                                st.text(job_description)
-                    else:
-                        job_description = raw_text
-                        with st.expander("View raw text"):
-                            st.text(job_description)
+                            if processed_text:
+                                st.session_state.processed_pdf_text = processed_text
+                            st.success("PDF processed successfully!")
+                
+                # Show both versions in expandable sections if PDF is processed
+                if st.session_state.raw_pdf_text:
+                    st.write("Available Versions:")
+                    with st.expander("View Raw PDF Text"):
+                        st.text(st.session_state.raw_pdf_text)
+                    
+                    if st.session_state.processed_pdf_text:
+                        with st.expander("View AI Processed PDF Text"):
+                            st.text(st.session_state.processed_pdf_text)
+                    
+                    # Selection buttons below the expandable sections
+                    st.write("---")  # Add a separator
+                    st.write("Select version to use:")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("Use Raw PDF"):
+                            st.session_state.active_document = 'pdf'
+                            st.session_state.active_version = 'raw'
+                            st.session_state.final_description = st.session_state.raw_pdf_text
+                            st.success("Raw PDF selected for recommendations!")
+                    
+                    with col2:
+                        if st.session_state.processed_pdf_text and st.button("Use AI Processed PDF"):
+                            st.session_state.active_document = 'pdf'
+                            st.session_state.active_version = 'ai'
+                            st.session_state.final_description = st.session_state.processed_pdf_text
+                            st.success("AI processed PDF selected for recommendations!")
+            
+            # Clear PDF state if file is removed
+            if not uploaded_file and st.session_state.active_document == 'pdf':
+                st.session_state.raw_pdf_text = None
+                st.session_state.processed_pdf_text = None
+                st.session_state.current_pdf_name = None
+                st.session_state.active_document = None
+                st.session_state.active_version = None
+                st.session_state.final_description = None
         
-        if job_description:
-            description_importance = st.select_slider(
-                "How important is the job description match?",
-                options=IMPORTANCE_LEVELS,
-                value="Important"
+        # Display current active selection status with more detail
+        if st.session_state.active_document:
+            st.info(f"Currently using {st.session_state.active_version} version of {st.session_state.active_document} input for recommendations")
+            with st.expander("View current selection"):
+                st.text(st.session_state.final_description)
+        
+        # Set job_description based on final selection
+        job_description = st.session_state.final_description or ""
+
+        # Priority selection if both title and description are available
+        priority = None
+        if job_title and job_description:
+            priority = st.radio(
+                "Which should be prioritized for matching?",
+                ["Job Title", "Job Description"],
+                help="Select which criteria should be used for finding similar jobs"
             )
         else:
-            description_importance = "Important"
+            priority = "Job Title" if job_title else "Job Description" if job_description else None
         
-        # Location
+        # Location processing with caching
         location_name = st.text_input("Postal Code (Singapore preferably)", "")
         location = None
         
         if location_name:
-            try:
-                with st.spinner("Finding location..."):
-                    location_data = geolocator.geocode(location_name)
-                    if location_data:
-                        location = (location_data.latitude, location_data.longitude)
-                        st.success(f"Location found: {location_data.address}")
-                        max_distance_km = st.number_input("Maximum distance in kilometers", 
-                                                        min_value=1.0, 
-                                                        max_value=100.0, 
-                                                        value=10.0)
-                    else:
-                        st.warning("Location not found, proceeding without location preference")
-                        location_name = None
-                        max_distance_km = 10.0
-            except Exception as e:
-                st.error(f"Error processing location: {e}")
-                location_name = None
-                max_distance_km = 10.0
+            # Check if location is already cached
+            if location_name in st.session_state.location_cache:
+                cached_data = st.session_state.location_cache[location_name]
+                location = cached_data['coords']
+                st.success(f"Location found (cached): {cached_data['address']}")
+                max_distance_km = st.number_input(
+                    "Maximum distance in kilometers", 
+                    min_value=1.0, 
+                    max_value=100.0, 
+                    value=10.0
+                )
+            else:
+                try:
+                    with st.spinner("Finding location..."):
+                        location_data = geolocator.geocode(location_name)
+                        if location_data:
+                            location = (location_data.latitude, location_data.longitude)
+                            # Cache the location data
+                            st.session_state.location_cache[location_name] = {
+                                'coords': location,
+                                'address': location_data.address
+                            }
+                            st.success(f"Location found: {location_data.address}")
+                            max_distance_km = st.number_input(
+                                "Maximum distance in kilometers", 
+                                min_value=1.0, 
+                                max_value=100.0, 
+                                value=10.0
+                            )
+                        else:
+                            st.warning("Location not found, proceeding without location preference")
+                            location_name = None
+                            max_distance_km = 10.0
+                except Exception as e:
+                    st.error(f"Error processing location: {e}")
+                    location_name = None
+                    max_distance_km = 10.0
         else:
             max_distance_km = 10.0
-        
+
         return UserPreferences(
             location=location,
             location_name=location_name,
             job_title=job_title,
             job_description=job_description,
             max_distance_km=max_distance_km,
-            title_importance=title_importance,
-            description_importance=description_importance
+            priority=priority,
+            within_range_count=5,  # Default value
+            outside_range_count=5  # Default value
         )
 
 def display_streamlit_recommendations(recommendations: Dict[str, List[dict]], preferences: UserPreferences) -> None:
@@ -587,12 +699,8 @@ def display_streamlit_recommendation_group(recommendations: List[dict], preferen
                     st.write("Location: Information unavailable")
             
             with col2:
-                st.write("**Score Components**")
-                for component, score in rec['score_components'].items():
-                    weight = preferences.weights.get(component, 0)
-                    weighted_score = score * weight
-                    st.write(f"{component}: {score:.3f}")
-                st.metric("Final Score", f"{rec['final_score']:.3f}")
+                st.write("**Similarity Score**")
+                st.metric("Score", f"{rec['final_score']:.3f}")
             
             st.write("**Links**")
             if rec.get('job_url_direct'):
@@ -608,6 +716,30 @@ def main():
         return
         
     preferences = streamlit_get_preferences()
+    
+    # Add results configuration just before generate recommendations button
+    st.subheader("Results Configuration", divider="gray")
+    col1, col2 = st.columns(2)
+    with col1:
+        within_range_count = st.number_input(
+            "Number of results within range",
+            min_value=1,
+            max_value=50,
+            value=5,
+            help="How many job recommendations to show within your specified distance"
+        )
+    with col2:
+        outside_range_count = st.number_input(
+            "Number of results outside range",
+            min_value=1,
+            max_value=50,
+            value=5,
+            help="How many job recommendations to show outside your specified distance"
+        )
+    
+    # Update preferences with the selected counts
+    preferences.within_range_count = within_range_count
+    preferences.outside_range_count = outside_range_count
     
     # Generate recommendations button
     if st.button("Generate Recommendations"):

@@ -19,7 +19,7 @@ def calculate_weights(
             'description_similarity': 0.35,
             'pagerank': 0.15,
             'degree': 0.10,
-            'core_number': 0.05
+            'core_numbers': 0.05
         }
     elif has_title or has_description:
         # Only one semantic input
@@ -29,14 +29,14 @@ def calculate_weights(
             'description_similarity': semantic_weight if has_description else 0.0,
             'pagerank': 0.25,
             'degree': 0.20,
-            'core_number': 0.05
+            'core_numbers': 0.05
         }
     else:
         # No semantic inputs
         weights = {
             'pagerank': 0.45,
             'degree': 0.45,
-            'core_number': 0.10
+            'core_numbers': 0.10
         }
 
     # Apply importance multipliers only for title and description
@@ -62,7 +62,7 @@ def calculate_weights(
     # Redistribute remaining weight to graph metrics
     remaining_weight = 1.0 - preference_weight
     if remaining_weight > 0:
-        graph_metrics = ['pagerank', 'degree', 'core_number']
+        graph_metrics = ['pagerank', 'degree', 'core_numbers']
         graph_weights_sum = sum(weights.get(metric, 0) for metric in graph_metrics)
         
         if graph_weights_sum > 0:

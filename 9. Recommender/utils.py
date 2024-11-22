@@ -98,7 +98,7 @@ def cache_graph_metrics(graph: nx.Graph) -> dict:
     metrics = {
         'pagerank': nx.pagerank(graph),
         'degree': dict(graph.degree()),
-        'core_number': nx.core_number(graph)
+        'core_numbers': nx.core_numbers(graph)
     }
     
     # Normalize metrics to [0,1] range
