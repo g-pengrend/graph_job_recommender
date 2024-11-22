@@ -158,12 +158,63 @@ def calculate_score_components(
     
     return {k: max(0, min(1, v)) for k, v in score_components.items()}
 
+def calculate_blend_weights(count: int) -> List[float]:
+    """Calculate similarity-to-graph-metrics blend weights based on result count"""
+    base_count = 5
+    weights = []
+    
+    # First 5 results are pure similarity
+    weights.extend([1.0] * base_count)
+    
+    # Calculate remaining weights with increasing graph metrics influence
+    remaining_count = count - base_count
+    if remaining_count > 0:
+        groups = remaining_count // base_count
+        for i in range(groups):
+            # Decrease similarity weight by 10% for each group
+            similarity_weight = 0.9 - (i * 0.1)
+            weights.extend([similarity_weight] * base_count)
+    
+    return weights[:count]
+
+def display_blend_legend(count: int):
+    """Display legend showing the blending ratios for different result ranges"""
+    st.write("**Blending Ratios Legend:**")
+    base_count = 5
+    
+    # Create a formatted table for the legend
+    legend_data = []
+    start_idx = 1
+    
+    # First group (pure similarity)
+    legend_data.append({
+        "Range": f"Results 1-5",
+        "Similarity": "100%",
+        "Graph Metrics": "0%"
+    })
+    
+    # Calculate remaining groups
+    remaining_groups = (count - base_count) // base_count
+    for i in range(remaining_groups):
+        start = start_idx + (i + 1) * base_count
+        end = start + base_count - 1
+        similarity_pct = 90 - (i * 10)
+        graph_pct = 10 + (i * 10)
+        
+        legend_data.append({
+            "Range": f"Results {start}-{end}",
+            "Similarity": f"{similarity_pct}%",
+            "Graph Metrics": f"{graph_pct}%"
+        })
+    
+    # Display as a table
+    st.table(legend_data)
+
 def get_graph_based_recommendations(
     preferences: UserPreferences
 ) -> Dict[str, List[dict]]:
-    """Get recommendations based on direct cosine similarity"""
+    """Get recommendations with progressive blending of similarity and graph metrics"""
     with st.spinner("Starting recommendation generation..."):
-        # Unpack only needed resources
         df = GLOBAL_RESOURCES['df']
         tokenizer = GLOBAL_RESOURCES['tokenizer']
         model = GLOBAL_RESOURCES['model']
@@ -175,12 +226,12 @@ def get_graph_based_recommendations(
         within_range = []
         outside_range = []
         
-        # Calculate similarities based on priority or fall back to graph metrics
         with st.spinner("Calculating similarities..."):
+            # Calculate base similarities
             if preferences.priority == "Job Title" and preferences.job_title:
                 title_embedding = get_job_title_embedding(preferences.job_title, tokenizer, model, device)
                 similarities = np.dot(np.array(df['job_title_embedding'].tolist()), title_embedding)
-                
+                method = "title similarity"
             elif preferences.priority == "Job Description" and preferences.job_description:
                 desc_embedding = get_job_description_embedding(
                     preferences.job_description,
@@ -189,19 +240,35 @@ def get_graph_based_recommendations(
                     device=device
                 )
                 similarities = np.dot(np.array(df['job_description_embedding'].tolist()), desc_embedding)
-            
+                method = "description similarity"
             else:
-                # Fallback to graph metrics if no title or description provided
-                st.info("No title or description provided. Using graph metrics for recommendations.")
+                # Fallback to pure graph metrics if no input
                 similarities = np.array([
                     graph_metrics['pagerank'][f"job_{i}"] * 0.4 +
                     graph_metrics['degree'][f"job_{i}"] * 0.4 +
                     graph_metrics['core_numbers'][f"job_{i}"] * 0.2
                     for i in range(len(df))
                 ])
+                method = "graph metrics"
+                
+            # Calculate graph-based scores
+            graph_scores = np.array([
+                graph_metrics['pagerank'][f"job_{i}"] * 0.4 +
+                graph_metrics['degree'][f"job_{i}"] * 0.4 +
+                graph_metrics['core_numbers'][f"job_{i}"] * 0.2
+                for i in range(len(df))
+            ])
             
-            # Get indices sorted by similarity
+            # Normalize scores
+            similarities = (similarities - similarities.min()) / (similarities.max() - similarities.min())
+            graph_scores = (graph_scores - graph_scores.min()) / (graph_scores.max() - graph_scores.min())
+            
+            # Get top candidates for both within and outside range
             sorted_indices = np.argsort(similarities)[::-1]
+            
+            # Process results with progressive blending
+            within_weights = preferences.blend_weights(preferences.within_range_count)
+            outside_weights = preferences.blend_weights(preferences.outside_range_count)
             
             # Process results
             for idx in sorted_indices:
@@ -212,38 +279,39 @@ def get_graph_based_recommendations(
                 try:
                     job_data = df.iloc[idx]
                     similarity_score = similarities[idx]
+                    graph_score = graph_scores[idx]
                     
-                    # Process job type
-                    job_type = job_data['job_type']
-                    if isinstance(job_type, str):
-                        try:
-                            job_type = ast.literal_eval(job_type)
-                        except:
-                            job_type = [job_type]
-                    elif not isinstance(job_type, (list, tuple)):
-                        job_type = [str(job_type)]
+                    # Apply progressive blending based on position
+                    if len(within_range) < preferences.within_range_count:
+                        weight = within_weights[len(within_range)]
+                        final_score = weight * similarity_score + (1 - weight) * graph_score
+                    else:
+                        weight = outside_weights[len(outside_range)]
+                        final_score = weight * similarity_score + (1 - weight) * graph_score
                     
+                    # Create job entry with additional metrics
                     job_entry = {
                         'index': job_data['id'],
                         'company': job_data['company'],
                         'title': job_data['title'],
-                        'job_type': job_type,
+                        'job_type': process_job_type(job_data['job_type']),
                         'location': job_data['lat_long'],
                         'address': job_data['address'],
                         'is_remote': job_data['is_remote'],
                         'job_url': job_data['job_url'],
                         'job_url_direct': job_data['job_url_direct'],
-                        'final_score': float(similarity_score)
+                        'final_score': float(final_score),
+                        'graph_metrics': {
+                            'pagerank': graph_metrics['pagerank'][f"job_{idx}"],
+                            'degree': graph_metrics['degree'][f"job_{idx}"],
+                            'core_number': graph_metrics['core_numbers'][f"job_{idx}"]
+                        }
                     }
                     
-                    # Check distance if location preference exists
+                    # Process location and distance
                     if preferences.location and job_data['lat_long']:
                         try:
-                            job_loc = (
-                                ast.literal_eval(job_data['lat_long'])
-                                if isinstance(job_data['lat_long'], str)
-                                else job_data['lat_long']
-                            )
+                            job_loc = process_location(job_data['lat_long'])
                             distance = geodesic(preferences.location, job_loc).kilometers
                             job_entry['distance'] = distance
                             
@@ -268,6 +336,26 @@ def get_graph_based_recommendations(
                 'within_range': within_range[:preferences.within_range_count],
                 'outside_range': outside_range[:preferences.outside_range_count]
             }
+
+# Helper functions for processing job entries
+def process_job_type(job_type):
+    """Process job type into consistent format"""
+    if isinstance(job_type, str):
+        try:
+            job_type = ast.literal_eval(job_type)
+        except:
+            job_type = [job_type]
+    elif not isinstance(job_type, (list, tuple)):
+        job_type = [str(job_type)]
+    return job_type
+
+def process_location(location):
+    """Process location into consistent format"""
+    return (
+        ast.literal_eval(location)
+        if isinstance(location, str)
+        else location
+    )
 
 def process_candidate_batch(
     batch_indices: List[int],
@@ -678,6 +766,9 @@ def display_streamlit_recommendations(recommendations: Dict[str, List[dict]], pr
 
 def display_streamlit_recommendation_group(recommendations: List[dict], preferences: UserPreferences) -> None:
     """Helper function to display a group of recommendations in Streamlit"""
+    # Display statistics for this group
+    st.metric("Results Found", len(recommendations))
+    
     for i, rec in enumerate(recommendations, 1):
         with st.expander(f"{i}. {rec['company']} - {rec['title']}"):
             col1, col2 = st.columns([2, 1])
@@ -717,35 +808,64 @@ def main():
         
     preferences = streamlit_get_preferences()
     
-    # Add results configuration just before generate recommendations button
+    # Results count configuration - using st.session_state to prevent rerun
+    if 'within_range_count' not in st.session_state:
+        st.session_state.within_range_count = 5
+    if 'outside_range_count' not in st.session_state:
+        st.session_state.outside_range_count = 5
+    
     st.subheader("Results Configuration", divider="gray")
+    
     col1, col2 = st.columns(2)
     with col1:
-        within_range_count = st.number_input(
+        within_range_count = st.selectbox(
             "Number of results within range",
-            min_value=1,
-            max_value=50,
-            value=5,
-            help="How many job recommendations to show within your specified distance"
+            options=[5, 10, 15, 20, 25, 30],
+            key='within_range_select',
+            help="Results will progressively blend similarity with graph metrics"
         )
     with col2:
-        outside_range_count = st.number_input(
+        outside_range_count = st.selectbox(
             "Number of results outside range",
-            min_value=1,
-            max_value=50,
-            value=5,
-            help="How many job recommendations to show outside your specified distance"
+            options=[5, 10, 15, 20, 25, 30],
+            key='outside_range_select',
+            help="Results will progressively blend similarity with graph metrics"
         )
     
-    # Update preferences with the selected counts
+    # Update preferences
     preferences.within_range_count = within_range_count
     preferences.outside_range_count = outside_range_count
+    preferences.blend_weights = calculate_blend_weights
     
     # Generate recommendations button
     if st.button("Generate Recommendations"):
         with st.spinner("Generating recommendations..."):
             recommendations = get_graph_based_recommendations(preferences=preferences)
-            display_streamlit_recommendations(recommendations, preferences)
+            
+            # Show blending legends and results in columns
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Within Range Results")
+                display_blend_legend(within_range_count)
+                if recommendations['within_range']:
+                    display_streamlit_recommendation_group(
+                        recommendations['within_range'],
+                        preferences
+                    )
+                else:
+                    st.info("No recommendations found within your preferred distance.")
+            
+            with col2:
+                st.subheader("Outside Range Results")
+                display_blend_legend(outside_range_count)
+                if recommendations['outside_range']:
+                    display_streamlit_recommendation_group(
+                        recommendations['outside_range'],
+                        preferences
+                    )
+                else:
+                    st.info("No recommendations found outside your preferred distance.")
 
 if __name__ == "__main__":
     main()

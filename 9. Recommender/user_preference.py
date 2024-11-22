@@ -12,3 +12,5 @@ class UserPreferences:
     priority: Optional[str] = None  # "Job Title" or "Job Description"
     within_range_count: int = 5     # Number of results to show within range
     outside_range_count: int = 5    # Number of results to show outside range
+    blend_metrics: bool = False
+    blend_weight: float = 0.7
