@@ -1,0 +1,321 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script>function neighbourhoodHighlight(params) {
+  // console.log("in nieghbourhoodhighlight");
+  allNodes = nodes.get({ returnType: "Object" });
+  // originalNodes = JSON.parse(JSON.stringify(allNodes));
+  // if something is selected:
+  if (params.nodes.length > 0) {
+    highlightActive = true;
+    var i, j;
+    var selectedNode = params.nodes[0];
+    var degrees = 2;
+
+    // mark all nodes as hard to read.
+    for (let nodeId in allNodes) {
+      // nodeColors[nodeId] = allNodes[nodeId].color;
+      allNodes[nodeId].color = "rgba(200,200,200,0.5)";
+      if (allNodes[nodeId].hiddenLabel === undefined) {
+        allNodes[nodeId].hiddenLabel = allNodes[nodeId].label;
+        allNodes[nodeId].label = undefined;
+      }
+    }
+    var connectedNodes = network.getConnectedNodes(selectedNode);
+    var allConnectedNodes = [];
+
+    // get the second degree nodes
+    for (i = 1; i < degrees; i++) {
+      for (j = 0; j < connectedNodes.length; j++) {
+        allConnectedNodes = allConnectedNodes.concat(
+          network.getConnectedNodes(connectedNodes[j])
+        );
+      }
+    }
+
+    // all second degree nodes get a different color and their label back
+    for (i = 0; i < allConnectedNodes.length; i++) {
+      // allNodes[allConnectedNodes[i]].color = "pink";
+      allNodes[allConnectedNodes[i]].color = "rgba(150,150,150,0.75)";
+      if (allNodes[allConnectedNodes[i]].hiddenLabel !== undefined) {
+        allNodes[allConnectedNodes[i]].label =
+          allNodes[allConnectedNodes[i]].hiddenLabel;
+        allNodes[allConnectedNodes[i]].hiddenLabel = undefined;
+      }
+    }
+
+    // all first degree nodes get their own color and their label back
+    for (i = 0; i < connectedNodes.length; i++) {
+      // allNodes[connectedNodes[i]].color = undefined;
+      allNodes[connectedNodes[i]].color = nodeColors[connectedNodes[i]];
+      if (allNodes[connectedNodes[i]].hiddenLabel !== undefined) {
+        allNodes[connectedNodes[i]].label =
+          allNodes[connectedNodes[i]].hiddenLabel;
+        allNodes[connectedNodes[i]].hiddenLabel = undefined;
+      }
+    }
+
+    // the main node gets its own color and its label back.
+    // allNodes[selectedNode].color = undefined;
+    allNodes[selectedNode].color = nodeColors[selectedNode];
+    if (allNodes[selectedNode].hiddenLabel !== undefined) {
+      allNodes[selectedNode].label = allNodes[selectedNode].hiddenLabel;
+      allNodes[selectedNode].hiddenLabel = undefined;
+    }
+  } else if (highlightActive === true) {
+    // console.log("highlightActive was true");
+    // reset all nodes
+    for (let nodeId in allNodes) {
+      // allNodes[nodeId].color = "purple";
+      allNodes[nodeId].color = nodeColors[nodeId];
+      // delete allNodes[nodeId].color;
+      if (allNodes[nodeId].hiddenLabel !== undefined) {
+        allNodes[nodeId].label = allNodes[nodeId].hiddenLabel;
+        allNodes[nodeId].hiddenLabel = undefined;
+      }
+    }
+    highlightActive = false;
+  }
+
+  // transform the object into an array
+  var updateArray = [];
+  if (params.nodes.length > 0) {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        // console.log(allNodes[nodeId]);
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  } else {
+    // console.log("Nothing was selected");
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        // console.log(allNodes[nodeId]);
+        // allNodes[nodeId].color = {};
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  }
+}
+
+function filterHighlight(params) {
+  allNodes = nodes.get({ returnType: "Object" });
+  // if something is selected:
+  if (params.nodes.length > 0) {
+    filterActive = true;
+    let selectedNodes = params.nodes;
+
+    // hiding all nodes and saving the label
+    for (let nodeId in allNodes) {
+      allNodes[nodeId].hidden = true;
+      if (allNodes[nodeId].savedLabel === undefined) {
+        allNodes[nodeId].savedLabel = allNodes[nodeId].label;
+        allNodes[nodeId].label = undefined;
+      }
+    }
+
+    for (let i=0; i < selectedNodes.length; i++) {
+      allNodes[selectedNodes[i]].hidden = false;
+      if (allNodes[selectedNodes[i]].savedLabel !== undefined) {
+        allNodes[selectedNodes[i]].label = allNodes[selectedNodes[i]].savedLabel;
+        allNodes[selectedNodes[i]].savedLabel = undefined;
+      }
+    }
+
+  } else if (filterActive === true) {
+    // reset all nodes
+    for (let nodeId in allNodes) {
+      allNodes[nodeId].hidden = false;
+      if (allNodes[nodeId].savedLabel !== undefined) {
+        allNodes[nodeId].label = allNodes[nodeId].savedLabel;
+        allNodes[nodeId].savedLabel = undefined;
+      }
+    }
+    filterActive = false;
+  }
+
+  // transform the object into an array
+  var updateArray = [];
+  if (params.nodes.length > 0) {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  } else {
+    for (let nodeId in allNodes) {
+      if (allNodes.hasOwnProperty(nodeId)) {
+        updateArray.push(allNodes[nodeId]);
+      }
+    }
+    nodes.update(updateArray);
+  }
+}
+
+function selectNode(nodes) {
+  network.selectNodes(nodes);
+  neighbourhoodHighlight({ nodes: nodes });
+  return nodes;
+}
+
+function selectNodes(nodes) {
+  network.selectNodes(nodes);
+  filterHighlight({nodes: nodes});
+  return nodes;
+}
+
+function highlightFilter(filter) {
+  let selectedNodes = []
+  let selectedProp = filter['property']
+  if (filter['item'] === 'node') {
+    let allNodes = nodes.get({ returnType: "Object" });
+    for (let nodeId in allNodes) {
+      if (allNodes[nodeId][selectedProp] && filter['value'].includes((allNodes[nodeId][selectedProp]).toString())) {
+        selectedNodes.push(nodeId)
+      }
+    }
+  }
+  else if (filter['item'] === 'edge'){
+    let allEdges = edges.get({returnType: 'object'});
+    // check if the selected property exists for selected edge and select the nodes connected to the edge
+    for (let edge in allEdges) {
+      if (allEdges[edge][selectedProp] && filter['value'].includes((allEdges[edge][selectedProp]).toString())) {
+        selectedNodes.push(allEdges[edge]['from'])
+        selectedNodes.push(allEdges[edge]['to'])
+      }
+    }
+  }
+  selectNodes(selectedNodes)
+}</script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+            
+            
+            
+            
+            
+
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 750px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#000002", "id": "job_19608", "label": "job_19608", "shape": "dot", "title": "Company: ORIENTAL EMPLOYMENT PTE. LTD.\nCommunity: 2"}, {"color": "#00000b", "id": "job_5737", "label": "job_5737", "shape": "dot", "title": "Company: TPO Temasek Polytechnic\nCommunity: 11"}, {"color": "#000001", "id": "job_3748", "label": "job_3748", "shape": "dot", "title": "Company: OTTOMAN CONFECTIONERIES PTE. LTD.\nCommunity: 1"}, {"color": "#000001", "id": "job_20394", "label": "job_20394", "shape": "dot", "title": "Company: vip consultancy\nCommunity: 1"}, {"color": "#000003", "id": "job_15051", "label": "job_15051", "shape": "dot", "title": "Company: RICH STAR INTERNATIONAL PTE. LTD.\nCommunity: 3"}, {"color": "#000003", "id": "job_4710", "label": "job_4710", "shape": "dot", "title": "Company: 1880 Singapore\nCommunity: 3"}, {"color": "#00000c", "id": "job_15459", "label": "job_15459", "shape": "dot", "title": "Company: SANTOSH CONSTRUCTION PTE. LTD.\nCommunity: 12"}, {"color": "#000000", "id": "job_10127", "label": "job_10127", "shape": "dot", "title": "Company: ITCAN Pte Ltd\nCommunity: 0"}, {"color": "#000001", "id": "job_23850", "label": "job_23850", "shape": "dot", "title": "Company: Rapsys Technologies Pte. Ltd\nCommunity: 1"}, {"color": "#000000", "id": "job_6177", "label": "job_6177", "shape": "dot", "title": "Company: Monti - 1-Group\nCommunity: 0"}, {"color": "#000008", "id": "job_8327", "label": "job_8327", "shape": "dot", "title": "Company: SEARCH INDEX PTE LTD\nCommunity: 8"}, {"color": "#000002", "id": "job_2967", "label": "job_2967", "shape": "dot", "title": "Company: EA Recruitment\nCommunity: 2"}, {"color": "#000002", "id": "job_24366", "label": "job_24366", "shape": "dot", "title": "Company: ENVIRODYNAMICS SOLUTIONS PTE. LTD.\nCommunity: 2"}, {"color": "#000000", "id": "job_24579", "label": "job_24579", "shape": "dot", "title": "Company: RECRUITPEDIA PTE. LTD.\nCommunity: 0"}, {"color": "#000005", "id": "job_7710", "label": "job_7710", "shape": "dot", "title": "Company: INFINITY NETWORKS SOLUTIONS PTE. LTD.\nCommunity: 5"}, {"color": "#00000d", "id": "job_15762", "label": "job_15762", "shape": "dot", "title": "Company: ORANGEKLOUD PTE. LTD.\nCommunity: 13"}, {"color": "#000001", "id": "job_23613", "label": "job_23613", "shape": "dot", "title": "Company: TSTAR RECRUIT PTE. LTD.\nCommunity: 1"}, {"color": "#000001", "id": "job_5154", "label": "job_5154", "shape": "dot", "title": "Company: LTA Land Transport Authority\nCommunity: 1"}, {"color": "#00000e", "id": "job_24280", "label": "job_24280", "shape": "dot", "title": "Company: LUSH PLATTERS PTE. LTD.\nCommunity: 14"}, {"color": "#000000", "id": "job_12629", "label": "job_12629", "shape": "dot", "title": "Company: BNP Paribas\nCommunity: 0"}, {"color": "#000000", "id": "job_16255", "label": "job_16255", "shape": "dot", "title": "Company: JAKARTA RADIANT WORLD PTE. LTD.\nCommunity: 0"}, {"color": "#000002", "id": "job_16125", "label": "job_16125", "shape": "dot", "title": "Company: Institute for Human Resource Professionals Limited\nCommunity: 2"}, {"color": "#00000f", "id": "job_14471", "label": "job_14471", "shape": "dot", "title": "Company: KIN VETERINARY CLINIC PTE. LTD.\nCommunity: 15"}, {"color": "#000000", "id": "job_5918", "label": "job_5918", "shape": "dot", "title": "Company: ITCAN Pte Ltd\nCommunity: 0"}, {"color": "#000000", "id": "job_25015", "label": "job_25015", "shape": "dot", "title": "Company: Marina Bay Sands\nCommunity: 0"}, {"color": "#000005", "id": "job_16656", "label": "job_16656", "shape": "dot", "title": "Company: Kabam Robotics\nCommunity: 5"}, {"color": "#000001", "id": "job_731", "label": "job_731", "shape": "dot", "title": "Company: WSH Experts Pte Ltd\nCommunity: 1"}, {"color": "#000000", "id": "job_24595", "label": "job_24595", "shape": "dot", "title": "Company: Binance\nCommunity: 0"}, {"color": "#000002", "id": "job_25484", "label": "job_25484", "shape": "dot", "title": "Company: FEY DAY PTE. LTD.\nCommunity: 2"}, {"color": "#000001", "id": "job_7103", "label": "job_7103", "shape": "dot", "title": "Company: THANKSGIVING SERVICED RESIDENCE PTE. LTD.\nCommunity: 1"}, {"color": "#000010", "id": "job_2845", "label": "job_2845", "shape": "dot", "title": "Company: Citi\nCommunity: 16"}, {"color": "#000000", "id": "job_8576", "label": "job_8576", "shape": "dot", "title": "Company: DBS Bank\nCommunity: 0"}, {"color": "#000002", "id": "job_22644", "label": "job_22644", "shape": "dot", "title": "Company: ORIENTAL EMPLOYMENT PTE. LTD.\nCommunity: 2"}, {"color": "#000001", "id": "job_17670", "label": "job_17670", "shape": "dot", "title": "Company: Wecruit\nCommunity: 1"}, {"color": "#000001", "id": "job_15077", "label": "job_15077", "shape": "dot", "title": "Company: D\u0027 FACE WORKS PTE. LTD.\nCommunity: 1"}, {"color": "#000001", "id": "job_1414", "label": "job_1414", "shape": "dot", "title": "Company: LEADBUILD CONSTRUCTION PTE. LTD.\nCommunity: 1"}, {"color": "#000000", "id": "job_694", "label": "job_694", "shape": "dot", "title": "Company: Cushman \u0026 Wakefield\nCommunity: 0"}, {"color": "#000003", "id": "job_17204", "label": "job_17204", "shape": "dot", "title": "Company: Sarai Restaurant Pte. Ltd.\nCommunity: 3"}, {"color": "#000009", "id": "job_13403", "label": "job_13403", "shape": "dot", "title": "Company: Nanyang Technological University\nCommunity: 9"}, {"color": "#000006", "id": "job_4360", "label": "job_4360", "shape": "dot", "title": "Company: AIRNOVATION ENGINEERING PTE. LTD.\nCommunity: 6"}, {"color": "#000001", "id": "job_2010", "label": "job_2010", "shape": "dot", "title": "Company: SAVA LEISURE (PTE.) LTD.\nCommunity: 1"}, {"color": "#000000", "id": "job_6200", "label": "job_6200", "shape": "dot", "title": "Company: ITCAN Pte Ltd\nCommunity: 0"}, {"color": "#000002", "id": "job_3278", "label": "job_3278", "shape": "dot", "title": "Company: GECO Asia Pte Ltd\nCommunity: 2"}, {"color": "#000002", "id": "job_8918", "label": "job_8918", "shape": "dot", "title": "Company: AT-SUNRICE GLOBALCHEF ACADEMY PTE. LTD.\nCommunity: 2"}, {"color": "#000003", "id": "job_4186", "label": "job_4186", "shape": "dot", "title": "Company: ONE DASH 22 PTE. LTD.\nCommunity: 3"}, {"color": "#000011", "id": "job_949", "label": "job_949", "shape": "dot", "title": "Company: LIMELITE PRODUCTIONS PTE. LTD.\nCommunity: 17"}, {"color": "#000004", "id": "job_10540", "label": "job_10540", "shape": "dot", "title": "Company: Ark Chiropractic (Kent Ridge)\nCommunity: 4"}, {"color": "#000006", "id": "job_22247", "label": "job_22247", "shape": "dot", "title": "Company: G STAR ENGINEERING PTE. LTD.\nCommunity: 6"}, {"color": "#000000", "id": "job_13761", "label": "job_13761", "shape": "dot", "title": "Company: Amazon.com\nCommunity: 0"}, {"color": "#000002", "id": "job_10227", "label": "job_10227", "shape": "dot", "title": "Company: AI Associates \nCommunity: 2"}, {"color": "#000000", "id": "job_12605", "label": "job_12605", "shape": "dot", "title": "Company: Anradus Pte Ltd\nCommunity: 0"}, {"color": "#000002", "id": "job_21890", "label": "job_21890", "shape": "dot", "title": "Company: NTUC First Campus Co-operative Ltd\nCommunity: 2"}, {"color": "#000001", "id": "job_22177", "label": "job_22177", "shape": "dot", "title": "Company: Commonwealth Bank of Australia\nCommunity: 1"}, {"color": "#000012", "id": "job_20869", "label": "job_20869", "shape": "dot", "title": "Company: PNH RESOURCES PTE LTD\nCommunity: 18"}, {"color": "#000000", "id": "job_21144", "label": "job_21144", "shape": "dot", "title": "Company: SagePaths Global Education\nCommunity: 0"}, {"color": "#000001", "id": "job_18977", "label": "job_18977", "shape": "dot", "title": "Company: DESIGN BUSINESS CHAMBER (SINGAPORE)\nCommunity: 1"}, {"color": "#000013", "id": "job_6322", "label": "job_6322", "shape": "dot", "title": "Company: KGBVEBLEN PTE. LTD.\nCommunity: 19"}, {"color": "#000014", "id": "job_13080", "label": "job_13080", "shape": "dot", "title": "Company: JLM CUISINE PTE. LTD.\nCommunity: 20"}, {"color": "#000000", "id": "job_7903", "label": "job_7903", "shape": "dot", "title": "Company: OCBC Bank\nCommunity: 0"}, {"color": "#000002", "id": "job_4859", "label": "job_4859", "shape": "dot", "title": "Company: GECO Asia Pte Ltd\nCommunity: 2"}, {"color": "#000000", "id": "job_2878", "label": "job_2878", "shape": "dot", "title": "Company: LINKEDCORP HR CONSULTANCY PTE. LTD.\nCommunity: 0"}, {"color": "#000000", "id": "job_1842", "label": "job_1842", "shape": "dot", "title": "Company: SCOR\nCommunity: 0"}, {"color": "#000004", "id": "job_7581", "label": "job_7581", "shape": "dot", "title": "Company: National University of Singapore\nCommunity: 4"}, {"color": "#000001", "id": "job_7555", "label": "job_7555", "shape": "dot", "title": "Company: GLOW SKIN PTE. LTD.\nCommunity: 1"}, {"color": "#000002", "id": "job_19218", "label": "job_19218", "shape": "dot", "title": "Company: FK HUMAN RESOURCES PRIVATE LIMITED\nCommunity: 2"}, {"color": "#000001", "id": "job_364", "label": "job_364", "shape": "dot", "title": "Company: WSH Experts Pte Ltd\nCommunity: 1"}, {"color": "#000002", "id": "job_10432", "label": "job_10432", "shape": "dot", "title": "Company: Microsec\nCommunity: 2"}, {"color": "#000002", "id": "job_24869", "label": "job_24869", "shape": "dot", "title": "Company: Millennium Technology Services\nCommunity: 2"}, {"color": "#000000", "id": "job_17523", "label": "job_17523", "shape": "dot", "title": "Company: Murex\nCommunity: 0"}, {"color": "#000001", "id": "job_21329", "label": "job_21329", "shape": "dot", "title": "Company: REPUBLIK\nCommunity: 1"}, {"color": "#000004", "id": "job_14227", "label": "job_14227", "shape": "dot", "title": "Company: CapitaLand\nCommunity: 4"}, {"color": "#000002", "id": "job_23829", "label": "job_23829", "shape": "dot", "title": "Company: EQUIPTEST ENGINEERING PTE. LTD.\nCommunity: 2"}, {"color": "#000007", "id": "job_4357", "label": "job_4357", "shape": "dot", "title": "Company: EVO LINES (S) PTE. LTD.\nCommunity: 7"}, {"color": "#000000", "id": "job_9687", "label": "job_9687", "shape": "dot", "title": "Company: Accenture\nCommunity: 0"}, {"color": "#000015", "id": "job_7265", "label": "job_7265", "shape": "dot", "title": "Company: d\u0027Doubles Pte Ltd\nCommunity: 21"}, {"color": "#000007", "id": "job_25060", "label": "job_25060", "shape": "dot", "title": "Company: The Rainforest Sports Hub Pte. Ltd.\nCommunity: 7"}, {"color": "#000008", "id": "job_5479", "label": "job_5479", "shape": "dot", "title": "Company: OX-KIDS Pte. Ltd.\nCommunity: 8"}, {"color": "#000002", "id": "job_12861", "label": "job_12861", "shape": "dot", "title": "Company: Day One Pte. Ltd.\nCommunity: 2"}, {"color": "#000001", "id": "job_11773", "label": "job_11773", "shape": "dot", "title": "Company: Kuok (Singapore) Limited\nCommunity: 1"}, {"color": "#000003", "id": "job_15632", "label": "job_15632", "shape": "dot", "title": "Company: AMPLE LIFE PTE. LTD.\nCommunity: 3"}, {"color": "#000009", "id": "job_14803", "label": "job_14803", "shape": "dot", "title": "Company: Nanyang Technological University\nCommunity: 9"}, {"color": "#000003", "id": "job_2435", "label": "job_2435", "shape": "dot", "title": "Company: William Tan Organisation\nCommunity: 3"}, {"color": "#000001", "id": "job_9121", "label": "job_9121", "shape": "dot", "title": "Company: LTA Land Transport Authority\nCommunity: 1"}, {"color": "#00000a", "id": "job_17768", "label": "job_17768", "shape": "dot", "title": "Company: KIM SENG HUAT HARDWARE PTE LTD\nCommunity: 10"}, {"color": "#000004", "id": "job_8397", "label": "job_8397", "shape": "dot", "title": "Company: National University of Singapore\nCommunity: 4"}, {"color": "#000016", "id": "job_6474", "label": "job_6474", "shape": "dot", "title": "Company: Changi General Hospital\nCommunity: 22"}, {"color": "#000000", "id": "job_15558", "label": "job_15558", "shape": "dot", "title": "Company: Grant Thornton\nCommunity: 0"}, {"color": "#000001", "id": "job_19388", "label": "job_19388", "shape": "dot", "title": "Company: WSH Experts Pte Ltd\nCommunity: 1"}, {"color": "#000003", "id": "job_12751", "label": "job_12751", "shape": "dot", "title": "Company: Orizal\nCommunity: 3"}, {"color": "#000000", "id": "job_9828", "label": "job_9828", "shape": "dot", "title": "Company: OCBC Bank\nCommunity: 0"}, {"color": "#000001", "id": "job_4470", "label": "job_4470", "shape": "dot", "title": "Company: Commonwealth Bank of Australia\nCommunity: 1"}, {"color": "#00000a", "id": "job_3261", "label": "job_3261", "shape": "dot", "title": "Company: Geonamics (S) Pte Ltd\nCommunity: 10"}, {"color": "#000017", "id": "job_15903", "label": "job_15903", "shape": "dot", "title": "Company: INCHCAPE MOTORS PRIVATE LIMITED\nCommunity: 23"}, {"color": "#000002", "id": "job_1712", "label": "job_1712", "shape": "dot", "title": "Company: Tribecar Pte. Ltd.\nCommunity: 2"}, {"color": "#000000", "id": "job_17078", "label": "job_17078", "shape": "dot", "title": "Company: Recruit Expert Pte. Ltd.\nCommunity: 0"}, {"color": "#000018", "id": "job_21025", "label": "job_21025", "shape": "dot", "title": "Company: AGPG ASIA PTE. LTD.\nCommunity: 24"}, {"color": "#000001", "id": "job_4666", "label": "job_4666", "shape": "dot", "title": "Company: LTA Land Transport Authority\nCommunity: 1"}, {"color": "#000000", "id": "job_3530", "label": "job_3530", "shape": "dot", "title": "Company: FA Search Pte Ltd\nCommunity: 0"}, {"color": "#000000", "id": "job_4806", "label": "job_4806", "shape": "dot", "title": "Company: SCDA Architects Pte Ltd\nCommunity: 0"}, {"color": "#000001", "id": "job_11961", "label": "job_11961", "shape": "dot", "title": "Company: WECRUIT PTE. LTD.\nCommunity: 1"}]);
+                  edges = new vis.DataSet([{"from": "job_19608", "to": "job_22644"}, {"from": "job_19608", "to": "job_10432"}, {"from": "job_19608", "to": "job_12861"}, {"from": "job_3748", "to": "job_364"}, {"from": "job_3748", "to": "job_731"}, {"from": "job_3748", "to": "job_1414"}, {"from": "job_3748", "to": "job_2010"}, {"from": "job_3748", "to": "job_4470"}, {"from": "job_3748", "to": "job_11961"}, {"from": "job_3748", "to": "job_17670"}, {"from": "job_3748", "to": "job_18977"}, {"from": "job_3748", "to": "job_19388"}, {"from": "job_3748", "to": "job_20394"}, {"from": "job_3748", "to": "job_21329"}, {"from": "job_3748", "to": "job_22177"}, {"from": "job_3748", "to": "job_23613"}, {"from": "job_3748", "to": "job_23850"}, {"from": "job_20394", "to": "job_2010"}, {"from": "job_20394", "to": "job_4470"}, {"from": "job_20394", "to": "job_18977"}, {"from": "job_20394", "to": "job_21329"}, {"from": "job_20394", "to": "job_22177"}, {"from": "job_20394", "to": "job_23613"}, {"from": "job_20394", "to": "job_23850"}, {"from": "job_15051", "to": "job_15632"}, {"from": "job_4710", "to": "job_2435"}, {"from": "job_4710", "to": "job_4186"}, {"from": "job_4710", "to": "job_12751"}, {"from": "job_4710", "to": "job_6177"}, {"from": "job_10127", "to": "job_5918"}, {"from": "job_10127", "to": "job_6200"}, {"from": "job_10127", "to": "job_694"}, {"from": "job_10127", "to": "job_1842"}, {"from": "job_10127", "to": "job_2878"}, {"from": "job_10127", "to": "job_3530"}, {"from": "job_10127", "to": "job_4806"}, {"from": "job_10127", "to": "job_6177"}, {"from": "job_10127", "to": "job_7903"}, {"from": "job_10127", "to": "job_8576"}, {"from": "job_10127", "to": "job_9687"}, {"from": "job_10127", "to": "job_9828"}, {"from": "job_10127", "to": "job_12605"}, {"from": "job_10127", "to": "job_12629"}, {"from": "job_10127", "to": "job_13761"}, {"from": "job_10127", "to": "job_15558"}, {"from": "job_10127", "to": "job_16255"}, {"from": "job_10127", "to": "job_17078"}, {"from": "job_10127", "to": "job_17523"}, {"from": "job_10127", "to": "job_21144"}, {"from": "job_10127", "to": "job_24579"}, {"from": "job_10127", "to": "job_24595"}, {"from": "job_10127", "to": "job_25015"}, {"from": "job_23850", "to": "job_364"}, {"from": "job_23850", "to": "job_731"}, {"from": "job_23850", "to": "job_2010"}, {"from": "job_23850", "to": "job_4470"}, {"from": "job_23850", "to": "job_9687"}, {"from": "job_23850", "to": "job_11961"}, {"from": "job_23850", "to": "job_17670"}, {"from": "job_23850", "to": "job_18977"}, {"from": "job_23850", "to": "job_19388"}, {"from": "job_23850", "to": "job_21144"}, {"from": "job_23850", "to": "job_21329"}, {"from": "job_23850", "to": "job_22177"}, {"from": "job_23850", "to": "job_23613"}, {"from": "job_6177", "to": "job_694"}, {"from": "job_6177", "to": "job_1842"}, {"from": "job_6177", "to": "job_2878"}, {"from": "job_6177", "to": "job_3530"}, {"from": "job_6177", "to": "job_5918"}, {"from": "job_6177", "to": "job_6200"}, {"from": "job_6177", "to": "job_7903"}, {"from": "job_6177", "to": "job_8576"}, {"from": "job_6177", "to": "job_9687"}, {"from": "job_6177", "to": "job_9828"}, {"from": "job_6177", "to": "job_12605"}, {"from": "job_6177", "to": "job_12629"}, {"from": "job_6177", "to": "job_13761"}, {"from": "job_6177", "to": "job_15558"}, {"from": "job_6177", "to": "job_16255"}, {"from": "job_6177", "to": "job_17078"}, {"from": "job_6177", "to": "job_17523"}, {"from": "job_6177", "to": "job_21144"}, {"from": "job_6177", "to": "job_24579"}, {"from": "job_6177", "to": "job_25015"}, {"from": "job_8327", "to": "job_5479"}, {"from": "job_2967", "to": "job_1712"}, {"from": "job_2967", "to": "job_3278"}, {"from": "job_2967", "to": "job_4859"}, {"from": "job_2967", "to": "job_12861"}, {"from": "job_2967", "to": "job_16125"}, {"from": "job_2967", "to": "job_19218"}, {"from": "job_2967", "to": "job_23829"}, {"from": "job_2967", "to": "job_24366"}, {"from": "job_2967", "to": "job_24869"}, {"from": "job_2967", "to": "job_25484"}, {"from": "job_24366", "to": "job_1712"}, {"from": "job_24366", "to": "job_3278"}, {"from": "job_24366", "to": "job_4859"}, {"from": "job_24366", "to": "job_8918"}, {"from": "job_24366", "to": "job_16125"}, {"from": "job_24366", "to": "job_19218"}, {"from": "job_24366", "to": "job_23829"}, {"from": "job_24366", "to": "job_24869"}, {"from": "job_24366", "to": "job_25484"}, {"from": "job_24579", "to": "job_694"}, {"from": "job_24579", "to": "job_1842"}, {"from": "job_24579", "to": "job_2878"}, {"from": "job_24579", "to": "job_3530"}, {"from": "job_24579", "to": "job_4806"}, {"from": "job_24579", "to": "job_5918"}, {"from": "job_24579", "to": "job_6200"}, {"from": "job_24579", "to": "job_7903"}, {"from": "job_24579", "to": "job_8576"}, {"from": "job_24579", "to": "job_9828"}, {"from": "job_24579", "to": "job_12605"}, {"from": "job_24579", "to": "job_12629"}, {"from": "job_24579", "to": "job_13761"}, {"from": "job_24579", "to": "job_15558"}, {"from": "job_24579", "to": "job_16255"}, {"from": "job_24579", "to": "job_17078"}, {"from": "job_24579", "to": "job_17523"}, {"from": "job_24579", "to": "job_24595"}, {"from": "job_24579", "to": "job_25015"}, {"from": "job_7710", "to": "job_16656"}, {"from": "job_23613", "to": "job_2010"}, {"from": "job_23613", "to": "job_4470"}, {"from": "job_23613", "to": "job_11961"}, {"from": "job_23613", "to": "job_17670"}, {"from": "job_23613", "to": "job_18977"}, {"from": "job_23613", "to": "job_21329"}, {"from": "job_23613", "to": "job_22177"}, {"from": "job_5154", "to": "job_4666"}, {"from": "job_5154", "to": "job_9121"}, {"from": "job_5154", "to": "job_364"}, {"from": "job_5154", "to": "job_731"}, {"from": "job_5154", "to": "job_1414"}, {"from": "job_5154", "to": "job_2010"}, {"from": "job_5154", "to": "job_4186"}, {"from": "job_5154", "to": "job_7555"}, {"from": "job_5154", "to": "job_11961"}, {"from": "job_5154", "to": "job_17670"}, {"from": "job_5154", "to": "job_18977"}, {"from": "job_5154", "to": "job_19388"}, {"from": "job_12629", "to": "job_694"}, {"from": "job_12629", "to": "job_1842"}, {"from": "job_12629", "to": "job_2878"}, {"from": "job_12629", "to": "job_3530"}, {"from": "job_12629", "to": "job_5918"}, {"from": "job_12629", "to": "job_6200"}, {"from": "job_12629", "to": "job_7903"}, {"from": "job_12629", "to": "job_8576"}, {"from": "job_12629", "to": "job_9687"}, {"from": "job_12629", "to": "job_9828"}, {"from": "job_12629", "to": "job_12605"}, {"from": "job_12629", "to": "job_13761"}, {"from": "job_12629", "to": "job_15558"}, {"from": "job_12629", "to": "job_16255"}, {"from": "job_12629", "to": "job_17078"}, {"from": "job_12629", "to": "job_17523"}, {"from": "job_12629", "to": "job_21144"}, {"from": "job_12629", "to": "job_25015"}, {"from": "job_16255", "to": "job_694"}, {"from": "job_16255", "to": "job_1842"}, {"from": "job_16255", "to": "job_2878"}, {"from": "job_16255", "to": "job_3530"}, {"from": "job_16255", "to": "job_4470"}, {"from": "job_16255", "to": "job_5918"}, {"from": "job_16255", "to": "job_6200"}, {"from": "job_16255", "to": "job_7903"}, {"from": "job_16255", "to": "job_8576"}, {"from": "job_16255", "to": "job_9687"}, {"from": "job_16255", "to": "job_9828"}, {"from": "job_16255", "to": "job_12605"}, {"from": "job_16255", "to": "job_13761"}, {"from": "job_16255", "to": "job_15558"}, {"from": "job_16255", "to": "job_17078"}, {"from": "job_16255", "to": "job_17523"}, {"from": "job_16255", "to": "job_21144"}, {"from": "job_16255", "to": "job_22177"}, {"from": "job_16255", "to": "job_25015"}, {"from": "job_16125", "to": "job_1712"}, {"from": "job_16125", "to": "job_3278"}, {"from": "job_16125", "to": "job_4859"}, {"from": "job_16125", "to": "job_19218"}, {"from": "job_16125", "to": "job_23829"}, {"from": "job_16125", "to": "job_24869"}, {"from": "job_16125", "to": "job_25484"}, {"from": "job_5918", "to": "job_6200"}, {"from": "job_5918", "to": "job_694"}, {"from": "job_5918", "to": "job_1842"}, {"from": "job_5918", "to": "job_2878"}, {"from": "job_5918", "to": "job_3530"}, {"from": "job_5918", "to": "job_4806"}, {"from": "job_5918", "to": "job_7903"}, {"from": "job_5918", "to": "job_8576"}, {"from": "job_5918", "to": "job_9687"}, {"from": "job_5918", "to": "job_9828"}, {"from": "job_5918", "to": "job_12605"}, {"from": "job_5918", "to": "job_13761"}, {"from": "job_5918", "to": "job_15558"}, {"from": "job_5918", "to": "job_17078"}, {"from": "job_5918", "to": "job_17523"}, {"from": "job_5918", "to": "job_21144"}, {"from": "job_5918", "to": "job_24595"}, {"from": "job_5918", "to": "job_25015"}, {"from": "job_25015", "to": "job_694"}, {"from": "job_25015", "to": "job_2878"}, {"from": "job_25015", "to": "job_3530"}, {"from": "job_25015", "to": "job_6200"}, {"from": "job_25015", "to": "job_7903"}, {"from": "job_25015", "to": "job_8576"}, {"from": "job_25015", "to": "job_9828"}, {"from": "job_25015", "to": "job_12605"}, {"from": "job_25015", "to": "job_13761"}, {"from": "job_25015", "to": "job_15558"}, {"from": "job_25015", "to": "job_17078"}, {"from": "job_25015", "to": "job_17523"}, {"from": "job_731", "to": "job_364"}, {"from": "job_731", "to": "job_19388"}, {"from": "job_731", "to": "job_1414"}, {"from": "job_731", "to": "job_2010"}, {"from": "job_731", "to": "job_4470"}, {"from": "job_731", "to": "job_4666"}, {"from": "job_731", "to": "job_7555"}, {"from": "job_731", "to": "job_9121"}, {"from": "job_731", "to": "job_11961"}, {"from": "job_731", "to": "job_17670"}, {"from": "job_731", "to": "job_18977"}, {"from": "job_731", "to": "job_21329"}, {"from": "job_731", "to": "job_22177"}, {"from": "job_24595", "to": "job_694"}, {"from": "job_24595", "to": "job_1842"}, {"from": "job_24595", "to": "job_2878"}, {"from": "job_24595", "to": "job_3530"}, {"from": "job_24595", "to": "job_4806"}, {"from": "job_24595", "to": "job_6200"}, {"from": "job_24595", "to": "job_7903"}, {"from": "job_24595", "to": "job_8576"}, {"from": "job_24595", "to": "job_9828"}, {"from": "job_24595", "to": "job_12605"}, {"from": "job_24595", "to": "job_13761"}, {"from": "job_24595", "to": "job_15558"}, {"from": "job_24595", "to": "job_17078"}, {"from": "job_24595", "to": "job_17523"}, {"from": "job_25484", "to": "job_1712"}, {"from": "job_25484", "to": "job_3278"}, {"from": "job_25484", "to": "job_4859"}, {"from": "job_25484", "to": "job_8918"}, {"from": "job_25484", "to": "job_12861"}, {"from": "job_25484", "to": "job_19218"}, {"from": "job_25484", "to": "job_23829"}, {"from": "job_25484", "to": "job_24869"}, {"from": "job_7103", "to": "job_2010"}, {"from": "job_7103", "to": "job_7555"}, {"from": "job_7103", "to": "job_9687"}, {"from": "job_7103", "to": "job_11773"}, {"from": "job_7103", "to": "job_21144"}, {"from": "job_8576", "to": "job_694"}, {"from": "job_8576", "to": "job_1842"}, {"from": "job_8576", "to": "job_2878"}, {"from": "job_8576", "to": "job_3530"}, {"from": "job_8576", "to": "job_4806"}, {"from": "job_8576", "to": "job_6200"}, {"from": "job_8576", "to": "job_7903"}, {"from": "job_8576", "to": "job_9828"}, {"from": "job_8576", "to": "job_12605"}, {"from": "job_8576", "to": "job_13761"}, {"from": "job_8576", "to": "job_15558"}, {"from": "job_8576", "to": "job_17078"}, {"from": "job_8576", "to": "job_17523"}, {"from": "job_22644", "to": "job_10432"}, {"from": "job_22644", "to": "job_12861"}, {"from": "job_17670", "to": "job_364"}, {"from": "job_17670", "to": "job_1414"}, {"from": "job_17670", "to": "job_2010"}, {"from": "job_17670", "to": "job_4470"}, {"from": "job_17670", "to": "job_4666"}, {"from": "job_17670", "to": "job_7555"}, {"from": "job_17670", "to": "job_9121"}, {"from": "job_17670", "to": "job_11961"}, {"from": "job_17670", "to": "job_18977"}, {"from": "job_17670", "to": "job_19388"}, {"from": "job_17670", "to": "job_21329"}, {"from": "job_17670", "to": "job_22177"}, {"from": "job_15077", "to": "job_1414"}, {"from": "job_1414", "to": "job_364"}, {"from": "job_1414", "to": "job_4666"}, {"from": "job_1414", "to": "job_9121"}, {"from": "job_1414", "to": "job_11961"}, {"from": "job_1414", "to": "job_19388"}, {"from": "job_694", "to": "job_1842"}, {"from": "job_694", "to": "job_2878"}, {"from": "job_694", "to": "job_3530"}, {"from": "job_694", "to": "job_4806"}, {"from": "job_694", "to": "job_6200"}, {"from": "job_694", "to": "job_7903"}, {"from": "job_694", "to": "job_9687"}, {"from": "job_694", "to": "job_9828"}, {"from": "job_694", "to": "job_12605"}, {"from": "job_694", "to": "job_13761"}, {"from": "job_694", "to": "job_15558"}, {"from": "job_694", "to": "job_17078"}, {"from": "job_694", "to": "job_17523"}, {"from": "job_694", "to": "job_21144"}, {"from": "job_17204", "to": "job_12751"}, {"from": "job_13403", "to": "job_14803"}, {"from": "job_4360", "to": "job_22247"}, {"from": "job_2010", "to": "job_364"}, {"from": "job_2010", "to": "job_4470"}, {"from": "job_2010", "to": "job_4666"}, {"from": "job_2010", "to": "job_7555"}, {"from": "job_2010", "to": "job_9121"}, {"from": "job_2010", "to": "job_9687"}, {"from": "job_2010", "to": "job_11961"}, {"from": "job_2010", "to": "job_18977"}, {"from": "job_2010", "to": "job_19388"}, {"from": "job_2010", "to": "job_21144"}, {"from": "job_2010", "to": "job_21329"}, {"from": "job_2010", "to": "job_22177"}, {"from": "job_6200", "to": "job_1842"}, {"from": "job_6200", "to": "job_2878"}, {"from": "job_6200", "to": "job_3530"}, {"from": "job_6200", "to": "job_4806"}, {"from": "job_6200", "to": "job_7903"}, {"from": "job_6200", "to": "job_9687"}, {"from": "job_6200", "to": "job_9828"}, {"from": "job_6200", "to": "job_12605"}, {"from": "job_6200", "to": "job_13761"}, {"from": "job_6200", "to": "job_15558"}, {"from": "job_6200", "to": "job_17078"}, {"from": "job_6200", "to": "job_17523"}, {"from": "job_6200", "to": "job_21144"}, {"from": "job_3278", "to": "job_4859"}, {"from": "job_3278", "to": "job_1712"}, {"from": "job_3278", "to": "job_8918"}, {"from": "job_3278", "to": "job_19218"}, {"from": "job_3278", "to": "job_23829"}, {"from": "job_3278", "to": "job_24869"}, {"from": "job_8918", "to": "job_4859"}, {"from": "job_8918", "to": "job_12861"}, {"from": "job_8918", "to": "job_23829"}, {"from": "job_8918", "to": "job_24869"}, {"from": "job_4186", "to": "job_2435"}, {"from": "job_4186", "to": "job_4666"}, {"from": "job_4186", "to": "job_9121"}, {"from": "job_4186", "to": "job_15632"}, {"from": "job_10540", "to": "job_7581"}, {"from": "job_10540", "to": "job_8397"}, {"from": "job_10540", "to": "job_14227"}, {"from": "job_13761", "to": "job_1842"}, {"from": "job_13761", "to": "job_2878"}, {"from": "job_13761", "to": "job_3530"}, {"from": "job_13761", "to": "job_4806"}, {"from": "job_13761", "to": "job_7903"}, {"from": "job_13761", "to": "job_9687"}, {"from": "job_13761", "to": "job_9828"}, {"from": "job_13761", "to": "job_12605"}, {"from": "job_13761", "to": "job_15558"}, {"from": "job_13761", "to": "job_17078"}, {"from": "job_13761", "to": "job_17523"}, {"from": "job_13761", "to": "job_21144"}, {"from": "job_10227", "to": "job_10432"}, {"from": "job_10227", "to": "job_21890"}, {"from": "job_12605", "to": "job_1842"}, {"from": "job_12605", "to": "job_2878"}, {"from": "job_12605", "to": "job_3530"}, {"from": "job_12605", "to": "job_4806"}, {"from": "job_12605", "to": "job_7903"}, {"from": "job_12605", "to": "job_9687"}, {"from": "job_12605", "to": "job_9828"}, {"from": "job_12605", "to": "job_15558"}, {"from": "job_12605", "to": "job_17078"}, {"from": "job_12605", "to": "job_17523"}, {"from": "job_12605", "to": "job_21144"}, {"from": "job_22177", "to": "job_4470"}, {"from": "job_22177", "to": "job_364"}, {"from": "job_22177", "to": "job_9687"}, {"from": "job_22177", "to": "job_11961"}, {"from": "job_22177", "to": "job_18977"}, {"from": "job_22177", "to": "job_19388"}, {"from": "job_22177", "to": "job_21144"}, {"from": "job_22177", "to": "job_21329"}, {"from": "job_21144", "to": "job_2878"}, {"from": "job_21144", "to": "job_4470"}, {"from": "job_21144", "to": "job_7555"}, {"from": "job_21144", "to": "job_7903"}, {"from": "job_21144", "to": "job_9687"}, {"from": "job_21144", "to": "job_9828"}, {"from": "job_21144", "to": "job_17078"}, {"from": "job_21144", "to": "job_18977"}, {"from": "job_21144", "to": "job_21329"}, {"from": "job_18977", "to": "job_364"}, {"from": "job_18977", "to": "job_4470"}, {"from": "job_18977", "to": "job_4666"}, {"from": "job_18977", "to": "job_7555"}, {"from": "job_18977", "to": "job_9121"}, {"from": "job_18977", "to": "job_9687"}, {"from": "job_18977", "to": "job_11961"}, {"from": "job_18977", "to": "job_19388"}, {"from": "job_18977", "to": "job_21329"}, {"from": "job_7903", "to": "job_9828"}, {"from": "job_7903", "to": "job_1842"}, {"from": "job_7903", "to": "job_2878"}, {"from": "job_7903", "to": "job_3530"}, {"from": "job_7903", "to": "job_4806"}, {"from": "job_7903", "to": "job_9687"}, {"from": "job_7903", "to": "job_15558"}, {"from": "job_7903", "to": "job_17078"}, {"from": "job_7903", "to": "job_17523"}, {"from": "job_4859", "to": "job_1712"}, {"from": "job_4859", "to": "job_19218"}, {"from": "job_4859", "to": "job_23829"}, {"from": "job_4859", "to": "job_24869"}, {"from": "job_2878", "to": "job_1842"}, {"from": "job_2878", "to": "job_3530"}, {"from": "job_2878", "to": "job_4806"}, {"from": "job_2878", "to": "job_9687"}, {"from": "job_2878", "to": "job_9828"}, {"from": "job_2878", "to": "job_15558"}, {"from": "job_2878", "to": "job_17078"}, {"from": "job_2878", "to": "job_17523"}, {"from": "job_1842", "to": "job_3530"}, {"from": "job_1842", "to": "job_4806"}, {"from": "job_1842", "to": "job_9828"}, {"from": "job_1842", "to": "job_15558"}, {"from": "job_1842", "to": "job_17078"}, {"from": "job_1842", "to": "job_17523"}, {"from": "job_7581", "to": "job_8397"}, {"from": "job_7581", "to": "job_14227"}, {"from": "job_7555", "to": "job_364"}, {"from": "job_7555", "to": "job_4666"}, {"from": "job_7555", "to": "job_9121"}, {"from": "job_7555", "to": "job_9687"}, {"from": "job_7555", "to": "job_11961"}, {"from": "job_7555", "to": "job_19388"}, {"from": "job_7555", "to": "job_21329"}, {"from": "job_19218", "to": "job_1712"}, {"from": "job_19218", "to": "job_12861"}, {"from": "job_19218", "to": "job_23829"}, {"from": "job_19218", "to": "job_24869"}, {"from": "job_364", "to": "job_19388"}, {"from": "job_364", "to": "job_4470"}, {"from": "job_364", "to": "job_4666"}, {"from": "job_364", "to": "job_9121"}, {"from": "job_364", "to": "job_11961"}, {"from": "job_364", "to": "job_21329"}, {"from": "job_24869", "to": "job_1712"}, {"from": "job_24869", "to": "job_12861"}, {"from": "job_24869", "to": "job_23829"}, {"from": "job_17523", "to": "job_3530"}, {"from": "job_17523", "to": "job_9828"}, {"from": "job_17523", "to": "job_15558"}, {"from": "job_17523", "to": "job_17078"}, {"from": "job_21329", "to": "job_4470"}, {"from": "job_21329", "to": "job_9687"}, {"from": "job_21329", "to": "job_11961"}, {"from": "job_21329", "to": "job_19388"}, {"from": "job_14227", "to": "job_8397"}, {"from": "job_23829", "to": "job_1712"}, {"from": "job_23829", "to": "job_12861"}, {"from": "job_4357", "to": "job_25060"}, {"from": "job_9687", "to": "job_4470"}, {"from": "job_9687", "to": "job_9828"}, {"from": "job_9687", "to": "job_17078"}, {"from": "job_2435", "to": "job_12751"}, {"from": "job_9121", "to": "job_4666"}, {"from": "job_9121", "to": "job_11961"}, {"from": "job_9121", "to": "job_19388"}, {"from": "job_17768", "to": "job_3261"}, {"from": "job_15558", "to": "job_3530"}, {"from": "job_15558", "to": "job_4806"}, {"from": "job_15558", "to": "job_9828"}, {"from": "job_15558", "to": "job_17078"}, {"from": "job_19388", "to": "job_4470"}, {"from": "job_19388", "to": "job_4666"}, {"from": "job_19388", "to": "job_11961"}, {"from": "job_9828", "to": "job_3530"}, {"from": "job_9828", "to": "job_4806"}, {"from": "job_9828", "to": "job_17078"}, {"from": "job_4470", "to": "job_11961"}, {"from": "job_17078", "to": "job_3530"}, {"from": "job_17078", "to": "job_4806"}, {"from": "job_4666", "to": "job_11961"}, {"from": "job_3530", "to": "job_4806"}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"physics": {"forceAtlas2Based": {"springLength": 100}, "minVelocity": 0.75, "solver": "forceAtlas2Based"}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>

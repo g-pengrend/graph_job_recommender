@@ -555,12 +555,12 @@ def streamlit_get_preferences() -> UserPreferences:
         job_title = st.text_input("Job Title (optional)", "")
         if job_title and job_title != st.session_state.current_job_title:
             st.session_state.current_job_title = job_title
-            with st.spinner("Processing job title..."):
-                processed_title = process_job_description_with_LLM(job_title)
-                st.session_state.processed_job_title = processed_title
-                if processed_title:
-                    with st.expander("View processed job title"):
-                        st.text(processed_title)
+            # with st.spinner("Processing job title..."):
+            #     processed_title = process_job_description_with_LLM(job_title)
+            #     st.session_state.processed_job_title = processed_title
+            #     if processed_title:
+            #         with st.expander("View processed job title"):
+            #             st.text(processed_title)
         
         # Job Description
         st.write("Job Description (optional)")
