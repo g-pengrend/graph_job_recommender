@@ -77,7 +77,8 @@ def get_language_models():
         device = 'cpu'
     
     # Load LLM model name
-    llm_model = 'capybarahermes-2.5-mistral-7b.Q5_K_M.gguf:latest'
+    # llm_model = 'capybarahermes-2.5-mistral-7b.Q5_K_M.gguf:latest'
+    llm_model = 'gemma3n:latest'
     logger.success("LLM model name loaded successfully.")
     
     return graph, node_embeddings, tokenizer, model, device, llm_model

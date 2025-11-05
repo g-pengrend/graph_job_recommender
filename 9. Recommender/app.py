@@ -94,7 +94,10 @@ def get_job_title_embedding(text: str, tokenizer, model, device: str = 'cpu') ->
 
 def process_job_description_with_LLM(document_text: str) -> Optional[str]:
     """Process job description using LLM for better matching"""
-    model_name = 'capybarahermes-2.5-mistral-7b.Q5_K_M.gguf:latest'
+    if GLOBAL_RESOURCES is None:
+        st.error("Resources not loaded. Please refresh the page.")
+        return None
+    model_name = GLOBAL_RESOURCES['llm_model']
     prompt = """You are an expert in understanding job descriptions and extracting the details and even nuanced requirements for the job. Your goal is to read the input slowly and take time to consider what is written, extract the information and break it down into these 3 aspects:
     1. responsibilites 
     2. qualifications
