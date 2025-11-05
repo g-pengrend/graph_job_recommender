@@ -615,8 +615,8 @@ def streamlit_get_preferences() -> UserPreferences:
             uploaded_file = st.file_uploader("Upload Resume/CV (PDF)", type=['pdf'])
             
             if uploaded_file:
-                # Process PDF button
-                if st.button("Upload PDF to system"):
+                # Automatically process PDF if it's a new file or hasn't been processed yet
+                if uploaded_file.name != st.session_state.current_pdf_name or st.session_state.raw_pdf_text is None:
                     with st.spinner("Processing PDF..."):
                         raw_text = extract_text_from_pdf(uploaded_file)
                         if raw_text:
@@ -626,6 +626,8 @@ def streamlit_get_preferences() -> UserPreferences:
                             if processed_text:
                                 st.session_state.processed_pdf_text = processed_text
                             st.success("PDF processed successfully!")
+                        else:
+                            st.error("Failed to extract text from PDF. Please try again.")
                 
                 # Show both versions in expandable sections if PDF is processed
                 if st.session_state.raw_pdf_text:
