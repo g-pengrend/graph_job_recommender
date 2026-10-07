@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Singapore Spatial Job Radar | GraphSAGE Recommender</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <!-- Custom Style -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Full-Bleed Map Canvas -->
+  <div id="map"></div>
+
+  <!-- Top Navigation & Status Bar -->
+  <header class="top-nav">
+    <div class="nav-brand">
+      <div class="radar-pulse-icon"></div>
+      <div class="brand-text">
+        <span class="brand-title">SINGAPORE SPATIAL JOB RADAR</span>
+        <span class="brand-sub">GraphSAGE Inductive Network &bull; 25,610 Jobs</span>
+      </div>
+    </div>
+
+    <!-- Quick Hub Jump Chips -->
+    <div class="quick-hubs">
+      <span class="hub-label">Fly to Tech Hubs:</span>
+      <button class="hub-chip" onclick="flyToHub(1.298, 103.787, 14, 'One-North')">One-North</button>
+      <button class="hub-chip" onclick="flyToHub(1.280, 103.853, 14, 'Marina Bay CBD')">Marina Bay CBD</button>
+      <button class="hub-chip" onclick="flyToHub(1.334, 103.963, 14, 'Changi Business Park')">Changi Biz Park</button>
+      <button class="hub-chip" onclick="flyToHub(1.335, 103.743, 14, 'Jurong East')">Jurong Innovation</button>
+    </div>
+
+    <!-- Map Layer Controls & Status -->
+    <div class="nav-actions">
+      <label class="toggle-pill" title="Toggle Islandwide 25k Job Density Heatmap">
+        <input type="checkbox" id="toggle-heatmap" checked>
+        <span class="toggle-track"></span>
+        <span class="toggle-text">🔥 Density Heatmap</span>
+      </label>
+      <div class="status-chip live-chip">
+        <span class="dot"></span>
+        <span id="map-provider-status">OpenStreetMap (Dark Mode)</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Left Floating Command Dock & Feed -->
+  <aside class="floating-dock" id="command-dock">
+    <!-- Dock Header -->
+    <div class="dock-header">
+      <div class="dock-tabs">
+        <button class="dock-tab active" data-tab="search-tab" onclick="switchTab('search-tab')">🔍 Search & Profile</button>
+        <button class="dock-tab" data-tab="results-tab" onclick="switchTab('results-tab')">
+          📋 Recommended Jobs (<span id="results-count-badge">0</span>)
+        </button>
+      </div>
+      <button class="dock-collapse-btn" id="collapse-btn" onclick="toggleDock()" title="Collapse Panel">◀</button>
+    </div>
+
+    <!-- TAB 1: Search, Personas & Preferences -->
+    <div class="tab-pane active" id="search-tab">
+      
+      <!-- Input Mode Switcher: Resume first, then Sample Personas, then Manual -->
+      <div class="mode-switcher-bar">
+        <button class="mode-btn active" id="mode-resume-btn" onclick="setProfileMode('resume')">📄 Upload Resume (PDF)</button>
+        <button class="mode-btn" id="mode-persona-btn" onclick="setProfileMode('persona')">✨ Sample Personas</button>
+        <button class="mode-btn" id="mode-manual-btn" onclick="setProfileMode('manual')">✍️ Manual Input</button>
+      </div>
+
+      <!-- MODE 1: Prominent PDF Resume Upload & AI Inspector Panel (Default Active) -->
+      <div class="section-box mode-panel" id="panel-resume">
+        <label class="section-title">📄 Candidate Resume</label>
+        
+        <!-- Big Drag-and-Drop Dropzone -->
+        <div class="resume-dropzone" id="resume-dropzone" onclick="document.getElementById('resume-file-input').click()">
+          <input type="file" id="resume-file-input" accept="application/pdf" style="display:none;" onchange="handleResumeFile(event)">
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-title">Click to Browse or Drag & Drop PDF Resume</div>
+          <div class="dropzone-sub">Automatic text extraction & Ollama LLM skills structuring</div>
+        </div>
+
+        <!-- Processing Status Spinner -->
+        <div id="resume-processing-indicator" class="processing-bar hidden">
+          <div class="spinner-small"></div>
+          <span id="processing-status-text">Extracting resume text and querying Ollama LLM...</span>
+        </div>
+
+        <!-- Resume Inspector Card (appears when file is uploaded) -->
+        <div id="resume-inspector-card" class="resume-inspector hidden">
+          <div class="inspector-meta-row">
+            <div>
+              <span class="file-name" id="uploaded-filename">resume.pdf</span>
+              <span class="word-count" id="uploaded-wordcount">0 words</span>
+            </div>
+            <span class="llm-model-badge" id="llm-model-badge">🤖 Ollama Active</span>
+          </div>
+
+          <!-- Dual Version View Tabs -->
+          <div class="version-tabs-row">
+            <button class="version-tab-btn active" id="btn-view-ai" onclick="switchResumeView('ai')">
+              🤖 AI Structured Profile
+            </button>
+            <button class="version-tab-btn" id="btn-view-raw" onclick="switchResumeView('raw')">
+              📄 Original PDF Text
+            </button>
+          </div>
+
+          <!-- Version Active Indicator Banner -->
+          <div class="active-version-banner">
+            <span id="version-banner-icon">✓</span>
+            <span id="version-banner-text">Using AI-Structured Profile for Recommender</span>
+            <button class="toggle-source-btn" id="toggle-source-btn" onclick="toggleActiveResumeSource()">Switch to Raw Text</button>
+          </div>
+
+          <!-- Editable Preview Text Area -->
+          <textarea id="resume-preview-textarea" rows="6" oninput="onPreviewTextEdited(this.value)"></textarea>
+          <div class="preview-hint">You can edit the extracted skills above. This exact text will be encoded by GraphSAGE & Sentence-Transformers.</div>
+        </div>
+      </div>
+
+      <!-- MODE 2: Sample Personas Panel -->
+      <div class="section-box mode-panel hidden" id="panel-persona">
+        <label class="section-title">✨ Pre-Configured Sample Personas</label>
+        <div class="persona-chips-grid" id="persona-chips-container">
+          <div class="skeleton-chip">Loading personas...</div>
+        </div>
+      </div>
+
+      <!-- Target Job Title & Skills Inputs (Hidden in Resume mode) -->
+      <div class="section-box hidden" id="target-role-box">
+        <label class="section-title" for="job-title-input">🎯 Target Job Title</label>
+        <input type="text" id="job-title-input" placeholder="e.g. Senior Machine Learning Engineer" value="">
+        
+        <div id="manual-desc-container">
+          <label class="section-title" for="job-desc-input" style="margin-top: 10px;">📄 Job Description / Target Skills</label>
+          <textarea id="job-desc-input" rows="3" placeholder="Paste job requirements or your skills..."></textarea>
+        </div>
+      </div>
+
+      <!-- Commute & Location -->
+      <div class="section-box">
+        <div class="commute-header">
+          <label class="section-title" for="postal-input">📍 Your Location (Singapore)</label>
+          <button class="small-text-btn" onclick="locateUserGPS()">🧭 Use GPS</button>
+        </div>
+        <div class="input-with-button">
+          <input type="text" id="postal-input" placeholder="Postal code (e.g. 138632) or area..." value="138632">
+          <button class="locate-btn" onclick="geocodePostal()">Search</button>
+        </div>
+        <div class="resolved-location" id="resolved-location-text">📍 One-North, Singapore</div>
+
+        <!-- 60 FPS Real-time Slider -->
+        <div class="slider-container">
+          <div class="slider-header">
+            <span>Commute Radius:</span>
+            <span class="radius-value-pill" id="radius-val">10 km</span>
+          </div>
+          <input type="range" id="distance-slider" min="2" max="35" step="1" value="10" oninput="onRadiusSliderChange(this.value)">
+          <div class="slider-ticks">
+            <span>2 km</span>
+            <span>10 km</span>
+            <span>20 km</span>
+            <span>35 km</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Priority & Counts (Priority hidden in Resume mode) -->
+      <div class="section-box">
+        <div class="flex-row">
+          <div class="flex-col hidden" id="priority-focus-col">
+            <label class="section-title">Priority Focus</label>
+            <select id="priority-select">
+              <option value="Job Description" selected>Skills & Description</option>
+              <option value="Job Title">Job Title Match</option>
+            </select>
+          </div>
+          <div class="flex-col" id="topk-col">
+            <label class="section-title">Results per Group</label>
+            <select id="topk-select">
+              <option value="5">Top 5 Each</option>
+              <option value="10" selected>Top 10 Each</option>
+              <option value="15">Top 15 Each</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trigger Button -->
+      <button class="primary-radar-btn" id="run-radar-btn" onclick="triggerRecommendation()">
+        <span class="btn-radar-icon">⚡</span>
+        <span>Run Spatial Graph Recommender</span>
+      </button>
+    </div>
+
+    <!-- TAB 2: Results Feed -->
+    <div class="tab-pane" id="results-tab">
+      <div class="results-subnav">
+        <button class="subnav-btn active" id="subtab-within" onclick="switchResultsSubtab('within')">
+          Within Commute (<span id="within-count">0</span>)
+        </button>
+        <button class="subnav-btn" id="subtab-outside" onclick="switchResultsSubtab('outside')">
+          Outside Commute (<span id="outside-count">0</span>)
+        </button>
+      </div>
+
+      <!-- Search results list -->
+      <div class="results-scroll-area" id="results-list">
+        <div class="empty-state">
+          <div class="empty-icon">🧭</div>
+          <div class="empty-title">Ready to Scan Singapore Job Network</div>
+          <div class="empty-desc">Click "Run Spatial Graph Recommender" to generate GraphSAGE candidate matches and view live map pins.</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Floating Interactive Map Legend & Density HUD -->
+  <div class="hud-legend-card" id="hud-legend-card">
+    <div class="hud-legend-header" onclick="toggleHudLegend()">
+      <div class="hud-legend-title-row">
+        <span class="hud-legend-icon">🔥</span>
+        <span class="hud-legend-title">Job Density Heatmap</span>
+        <span class="hud-count-pill" id="hud-point-count">25,610 jobs</span>
+      </div>
+      <button class="hud-collapse-btn" id="hud-collapse-btn" onclick="event.stopPropagation(); toggleHudLegend()" title="Collapse / Expand Legend">▾</button>
+    </div>
+
+    <div class="hud-legend-body" id="hud-legend-body">
+      <!-- Gradient Spectrum Bar & Density Ticks -->
+      <div class="spectrum-section">
+        <div class="spectrum-bar" id="hud-spectrum-bar"></div>
+        <div class="spectrum-ticks">
+          <span>Sparse (1-5)</span>
+          <span>Moderate (10+)</span>
+          <span>Dense (25+)</span>
+          <span>Peak Hubs</span>
+        </div>
+      </div>
+
+      <!-- Quick Tuning Sliders -->
+      <div class="hud-controls-group">
+        <div class="hud-control-row">
+          <div class="hud-control-label">
+            <span>Saturation Scale:</span>
+            <span class="hud-val-tag" id="hud-density-val">Balanced (5.5)</span>
+          </div>
+          <input type="range" id="heatmap-density-slider" min="1.5" max="10.0" step="0.5" value="5.5" oninput="onHeatmapDensityChange(this.value)">
+        </div>
+
+        <div class="hud-control-row">
+          <div class="hud-control-label">
+            <span>Cluster Radius:</span>
+            <span class="hud-val-tag" id="hud-radius-val">13 px</span>
+          </div>
+          <input type="range" id="heatmap-radius-slider" min="7" max="25" step="1" value="13" oninput="onHeatmapRadiusChange(this.value)">
+        </div>
+      </div>
+
+      <!-- Heatmap Palette Selector -->
+      <div class="hud-palette-row">
+        <span class="hud-mini-label">Palette:</span>
+        <div class="hud-palette-buttons">
+          <button class="palette-chip active" id="pal-btn-cyberpunk" onclick="setHeatmapPalette('cyberpunk')">Cyberpunk</button>
+          <button class="palette-chip" id="pal-btn-magma" onclick="setHeatmapPalette('magma')">Solar Magma</button>
+          <button class="palette-chip" id="pal-btn-emerald" onclick="setHeatmapPalette('emerald')">Emerald</button>
+        </div>
+      </div>
+
+      <!-- Map Symbols Guide -->
+      <div class="hud-symbols-grid">
+        <div class="symbol-item">
+          <span class="symbol-dot user-dot"></span>
+          <span>Your Location</span>
+        </div>
+        <div class="symbol-item">
+          <span class="symbol-dot in-dot"></span>
+          <span>Within Commute</span>
+        </div>
+        <div class="symbol-item">
+          <span class="symbol-dot out-dot"></span>
+          <span>Outside Commute</span>
+        </div>
+        <div class="symbol-item">
+          <span class="symbol-ring-icon"></span>
+          <span>Commute Radius</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job Detail Slide-over Modal / Drawer -->
+  <div class="detail-drawer" id="detail-drawer">
+    <div class="drawer-header">
+      <div class="drawer-rank" id="drawer-rank">RANK #1</div>
+      <button class="drawer-close-btn" onclick="closeDrawer()">&times;</button>
+    </div>
+    <div class="drawer-content" id="drawer-content">
+      <!-- Populated dynamically via JS -->
+    </div>
+  </div>
+
+  <!-- Leaflet JS & Leaflet.heat CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  
+  <!-- Main Client Script -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
